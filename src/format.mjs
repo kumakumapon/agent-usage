@@ -31,6 +31,24 @@ export function formatCompact(n) {
  * Renders a rough "N days/hours/minutes ago" string, for flagging stale caches.
  * @param {string|null} isoTimestamp
  */
+/**
+ * Renders a compact "in Nd/Nh/Nm" (or "past due") string for a future
+ * timestamp, replacing a full ISO datetime in table columns.
+ * @param {string|null} isoTimestamp
+ */
+export function formatUntil(isoTimestamp) {
+  if (!isoTimestamp) return '—';
+  const ms = new Date(isoTimestamp).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return '—';
+  if (ms <= 0) return 'past due';
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `in ${hours}h`;
+  const days = Math.round(hours / 24);
+  return `in ${days}d`;
+}
+
 export function formatAge(isoTimestamp) {
   if (!isoTimestamp) return 'unknown';
   const ms = Date.now() - new Date(isoTimestamp).getTime();

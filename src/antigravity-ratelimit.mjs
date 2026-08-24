@@ -35,11 +35,14 @@ export async function readAntigravityRateLimit() {
   const groups = parsed.command?.data?.groups;
   if (!groups) return { error: 'unexpected /usage response shape from agy' };
 
+  const shortGroupName = (name) =>
+    /claude|gpt/i.test(name) ? 'Claude/GPT' : name.replace(/\s+Models?$/i, '');
+
   const windows = [];
   for (const group of groups) {
     for (const bucket of group.buckets || []) {
       windows.push({
-        window: `${group.name} — ${bucket.name}`,
+        window: `${shortGroupName(group.name)} ${bucket.window || bucket.name}`,
         percent:
           typeof bucket.remaining_fraction === 'number'
             ? Math.round((1 - bucket.remaining_fraction) * 100)

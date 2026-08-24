@@ -6,17 +6,17 @@ import { readClaudeRateLimit } from './claude-ratelimit.mjs';
 import { readCodexRateLimit } from './codex-ratelimit.mjs';
 import { readAntigravityRateLimit } from './antigravity-ratelimit.mjs';
 import { loadPricing, estimateCost, PRICING_FILE } from './pricing.mjs';
-import { formatInt, formatCompact, formatCost, formatAge, renderTable, renderBarChart, renderGauge } from './format.mjs';
+import { formatInt, formatCompact, formatCost, formatAge, formatUntil, renderTable, renderBarChart, renderGauge } from './format.mjs';
 
 const HELP = `Usage: agent-usage [command] [options]
 
 Commands:
-  usage (default)   Token usage for Claude Code CLI and Codex CLI from their
-                     session logs; Antigravity's local status is reported
-                     separately since it exposes no token counts on disk.
-  limits             Current rate-limit / quota utilization: read from local
+  limits (default)   Current rate-limit / quota utilization: read from local
                      cache for Claude/Codex, and via a live \`agy -p /usage\`
                      call for Antigravity (its quota is never written to disk).
+  usage               Token usage (by model or by day) for Claude Code CLI and
+                     Codex CLI from their session logs, plus Antigravity's
+                     local activity; run this explicitly to see it.
 
 Options:
   --tool <name>     Limit to one tool: claude, codex, antigravity, all (default: all)
@@ -54,7 +54,7 @@ function parseCliArgs(argv) {
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
-  const command = positionals[0] === 'limits' ? 'limits' : 'usage';
+  const command = positionals[0] === 'usage' ? 'usage' : 'limits';
   return { ...values, command, limits: !noLimits };
 }
 
@@ -215,8 +215,8 @@ function codexTable(rows, by, pricing) {
 }
 
 function limitsTable(windows) {
-  const headers = ['Window', 'Usage', 'Resets At'];
-  const body = windows.map((w) => [w.window, renderGauge(w.percent), w.resetsAt || '—']);
+  const headers = ['Window', 'Usage', 'Resets'];
+  const body = windows.map((w) => [w.window, renderGauge(w.percent, 6), formatUntil(w.resetsAt)]);
   return renderTable(headers, body, []);
 }
 
