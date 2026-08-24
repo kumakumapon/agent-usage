@@ -6,7 +6,7 @@ import { readClaudeRateLimit } from './claude-ratelimit.mjs';
 import { readCodexRateLimit } from './codex-ratelimit.mjs';
 import { readAntigravityRateLimit } from './antigravity-ratelimit.mjs';
 import { loadPricing, estimateCost, PRICING_FILE } from './pricing.mjs';
-import { formatInt, formatCost, renderTable, renderBarChart, renderGauge } from './format.mjs';
+import { formatInt, formatCompact, formatCost, formatAge, renderTable, renderBarChart, renderGauge } from './format.mjs';
 
 const HELP = `Usage: agent-usage [command] [options]
 
@@ -24,6 +24,7 @@ Options:
   --since <date>      [usage only] Only include usage on/after this date (YYYY-MM-DD)
   --until <date>       [usage only] Only include usage on/before this date (YYYY-MM-DD)
   --chart               [usage only] Also print a bar chart of totals per row
+  --no-limits            [usage only] Skip the rate-limits section (shown by default)
   --json                Print machine-readable JSON instead of tables
   --pricing             Print the path to the editable pricing file and exit
   -h, --help            Show this help
@@ -34,8 +35,13 @@ Models without a configured rate show token counts with no cost column.
 `;
 
 function parseCliArgs(argv) {
+  // util.parseArgs has no built-in --no-x negation for booleans, so handle
+  // --no-limits manually before parsing.
+  const noLimits = argv.includes('--no-limits');
+  const filtered = argv.filter((a) => a !== '--no-limits');
+
   const { values, positionals } = parseArgs({
-    args: argv,
+    args: filtered,
     allowPositionals: true,
     options: {
       tool: { type: 'string', default: 'all' },
@@ -49,7 +55,7 @@ function parseCliArgs(argv) {
     },
   });
   const command = positionals[0] === 'limits' ? 'limits' : 'usage';
-  return { ...values, command };
+  return { ...values, command, limits: !noLimits };
 }
 
 function inDateRange(timestamp, since, until) {
@@ -148,11 +154,11 @@ function claudeTable(rows, by, pricing) {
     return [
       r.key,
       String(r.sessions),
-      formatInt(r.input),
-      formatInt(r.output),
-      formatInt(r.cacheWrite),
-      formatInt(r.cacheRead),
-      formatInt(r.total),
+      formatCompact(r.input),
+      formatCompact(r.output),
+      formatCompact(r.cacheWrite),
+      formatCompact(r.cacheRead),
+      formatCompact(r.total),
       formatCost(cost),
     ];
   });
@@ -164,7 +170,7 @@ function claudeTable(rows, by, pricing) {
     '',
     '',
     '',
-    formatInt(grandTotal),
+    formatCompact(grandTotal),
     anyCost ? formatCost(grandCost) : '—',
   ]);
 
@@ -195,15 +201,15 @@ function codexTable(rows, by, pricing) {
     return [
       r.key,
       String(r.sessions),
-      formatInt(r.input),
-      formatInt(r.cachedInput),
-      formatInt(r.output),
-      formatInt(r.total),
+      formatCompact(r.input),
+      formatCompact(r.cachedInput),
+      formatCompact(r.output),
+      formatCompact(r.total),
       formatCost(cost),
     ];
   });
 
-  body.push(['TOTAL', '', '', '', '', formatInt(grandTotal), anyCost ? formatCost(grandCost) : '—']);
+  body.push(['TOTAL', '', '', '', '', formatCompact(grandTotal), anyCost ? formatCost(grandCost) : '—']);
 
   return renderTable(headers, body, [1, 2, 3, 4, 5, 6]);
 }
@@ -214,24 +220,32 @@ function limitsTable(windows) {
   return renderTable(headers, body, []);
 }
 
-async function runLimits(args) {
-  const tools = args.tool === 'all' ? ['claude', 'codex', 'antigravity'] : args.tool.split(',');
+async function gatherLimits(tools) {
   const result = {};
-
   if (tools.includes('claude')) result.claude = readClaudeRateLimit();
   if (tools.includes('codex')) result.codex = await readCodexRateLimit();
   if (tools.includes('antigravity')) result.antigravity = await readAntigravityRateLimit();
+  return result;
+}
 
-  if (args.json) {
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
+function printLimits(result) {
   if ('claude' in result) {
     console.log('\nClaude Code CLI rate limits');
     if (result.claude) {
       console.log(limitsTable(result.claude.windows));
-      console.log(`  as of: ${result.claude.fetchedAt} (last time Claude Code refreshed this locally)`);
+      const age = formatAge(result.claude.fetchedAt);
+      console.log(`  as of: ${result.claude.fetchedAt} (${age})`);
+      const now = Date.now();
+      const expired = result.claude.windows.some((w) => w.resetsAt && new Date(w.resetsAt).getTime() < now);
+      if (expired) {
+        console.log(
+          '  WARNING: at least one reset time above is already in the past — this cache is stale and the',
+        );
+        console.log(
+          '  numbers no longer reflect reality. Claude Code only refreshes this cache when you view usage',
+        );
+        console.log('  inside the CLI (the /usage screen). Do that once, then re-run this command.');
+      }
     } else {
       console.log('  no cached rate-limit data found (run Claude Code at least once)');
     }
@@ -242,7 +256,12 @@ async function runLimits(args) {
     if (result.codex) {
       console.log(limitsTable(result.codex.windows));
       console.log(`  plan: ${result.codex.planType || 'unknown'}`);
-      console.log(`  as of: ${result.codex.fetchedAt} (last recorded API response)`);
+      console.log(`  as of: ${result.codex.fetchedAt} (${formatAge(result.codex.fetchedAt)}, last recorded API response)`);
+      const now = Date.now();
+      if (result.codex.windows.some((w) => w.resetsAt && new Date(w.resetsAt).getTime() < now)) {
+        console.log('  WARNING: at least one reset time above is already in the past — Codex hasn\'t made an');
+        console.log('  API call since then, so this is stale. Run Codex once to refresh, then re-run this command.');
+      }
     } else {
       console.log('  no rate-limit data found in recent session logs');
     }
@@ -258,6 +277,18 @@ async function runLimits(args) {
       console.log(`  could not fetch: ${ag?.error || 'unknown error'}`);
     }
   }
+}
+
+async function runLimits(args) {
+  const tools = args.tool === 'all' ? ['claude', 'codex', 'antigravity'] : args.tool.split(',');
+  const result = await gatherLimits(tools);
+
+  if (args.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  printLimits(result);
   console.log('');
 }
 
@@ -297,8 +328,10 @@ export async function run(argv) {
     result.antigravity = collectAntigravityActivity({ since: args.since, until: args.until });
   }
 
+  const limits = args.limits ? await gatherLimits(tools) : null;
+
   if (args.json) {
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(limits ? { ...result, limits } : result, null, 2));
     return;
   }
 
@@ -325,7 +358,7 @@ export async function run(argv) {
       const headers = ['Date', 'Sessions', 'Turns'];
       const body = ag.byDay.map((r) => [r.day, String(r.sessions), String(r.turns)]);
       console.log(renderTable(headers, body, [1, 2]));
-      console.log(`  all-time: ${ag.totalConversations} conversations, ${formatInt(ag.totalSteps)} agent steps`);
+      console.log(`  all-time: ${ag.totalConversations} conversations, ${formatCompact(ag.totalSteps)} agent steps`);
       if (args.chart && ag.byDay.length) {
         console.log();
         console.log(renderBarChart(ag.byDay.map((r) => ({ label: r.day, value: r.turns }))));
@@ -333,5 +366,11 @@ export async function run(argv) {
     }
     console.log(`  ${ag.note}`);
   }
+
+  if (limits) {
+    console.log('\n--- Rate limits ---');
+    printLimits(limits);
+  }
+
   console.log('');
 }
