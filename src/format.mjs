@@ -2,6 +2,48 @@ export function formatInt(n) {
   return Math.round(n).toLocaleString('en-US');
 }
 
+/**
+ * Compact number formatting (1.2K / 3.4M / 5.6B) for table columns, so a
+ * row of token counts fits in roughly half the width of the full
+ * comma-grouped form. Falls back to a plain integer below 1000.
+ * @param {number} n
+ */
+export function formatCompact(n) {
+  const v = Math.round(n);
+  const abs = Math.abs(v);
+  if (abs < 1000) return String(v);
+  const units = [
+    [1_000_000_000, 'B'],
+    [1_000_000, 'M'],
+    [1_000, 'K'],
+  ];
+  for (const [threshold, suffix] of units) {
+    if (abs >= threshold) {
+      const scaled = v / threshold;
+      const digits = Math.abs(scaled) >= 100 ? 0 : 1;
+      return `${scaled.toFixed(digits)}${suffix}`;
+    }
+  }
+  return String(v);
+}
+
+/**
+ * Renders a rough "N days/hours/minutes ago" string, for flagging stale caches.
+ * @param {string|null} isoTimestamp
+ */
+export function formatAge(isoTimestamp) {
+  if (!isoTimestamp) return 'unknown';
+  const ms = Date.now() - new Date(isoTimestamp).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return 'unknown';
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function formatCost(n) {
   if (n == null) return '—';
   return '$' + n.toFixed(2);
@@ -60,7 +102,7 @@ function bar(value, max, width) {
  */
 export function renderBarChart(rows, opts = {}) {
   const width = opts.width ?? 30;
-  const formatValue = opts.formatValue ?? ((n) => formatInt(n));
+  const formatValue = opts.formatValue ?? ((n) => formatCompact(n));
   if (rows.length === 0) return '  (no data)';
 
   const labelWidth = Math.max(...rows.map((r) => r.label.length));
