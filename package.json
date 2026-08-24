@@ -1,0 +1,21 @@
+{
+  "name": "agent-usage",
+  "version": "0.1.0",
+  "description": "List local token usage and rate-limit status for Claude Code CLI, Codex CLI, and Antigravity from their local session logs.",
+  "type": "module",
+  "bin": {
+    "agent-usage": "./bin.mjs"
+  },
+  "keywords": [
+    "claude-code",
+    "codex-cli",
+    "antigravity",
+    "token-usage",
+    "rate-limit",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT"
+}
