@@ -69,33 +69,40 @@ agent-usage limits --json
 
 Reads:
 
-- **Claude Code**: `~/.claude.json` → `cachedUsageUtilization`, the same
-  numbers the Claude Code TUI status line shows. This is a local cache, so
-  it's only as fresh as the last time you ran Claude Code.
+- **Claude Code**: **a live query.** Claude Code never writes its quota
+  percentage to disk in a structured form, so this runs
+  `claude -p "/usage" --output-format json` as a child process — the same
+  `/usage` slash command the TUI exposes — and parses the plain-text report
+  out of its reply. That command is a built-in Claude Code feature, not an
+  LLM turn (it reports `num_turns: 0` and `total_cost_usd: 0`), that itself
+  talks to Anthropic's backend to fetch your quota. It requires `claude` on
+  PATH and an active login.
 - **Codex CLI**: the `rate_limits` snapshot embedded in the most recent
   `token_count` event across your session logs (checks the ~20
-  most-recently-modified session files).
-- **Antigravity (`agy`)**: **the one place this tool makes a network call.**
-  Antigravity never writes its quota percentage to disk, so there is no file
-  to read. Instead this runs `agy -p "/usage" --output-format json` as a
-  child process and parses its structured response. That command is a
-  built-in Antigravity feature (not an LLM call — it reports `num_turns: 0`
-  and zero token usage) that itself talks to Google's Cloud Code backend to
-  fetch your quota. It requires `agy` on PATH and an active login; it takes
-  roughly 5-10 seconds to start the CLI process.
+  most-recently-modified session files). Unlike Claude Code and Antigravity,
+  Codex CLI has no free/live status query — any live check would require
+  sending a real prompt and consuming actual quota — so this reads the last
+  snapshot already recorded from your normal usage instead.
+- **Antigravity (`agy`)**: **also a live query.** Antigravity never writes
+  its quota percentage to disk, so there is no file to read. Instead this
+  runs `agy -p "/usage" --output-format json` as a child process and parses
+  its structured response. That command is a built-in Antigravity feature
+  (not an LLM call — it reports `num_turns: 0` and zero token usage) that
+  itself talks to Google's Cloud Code backend to fetch your quota. It
+  requires `agy` on PATH and an active login; it takes roughly 5-10 seconds
+  to start the CLI process.
 
 ## Privacy notes
 
-- **No data leaves your machine** except the one `agy -p /usage` call
-  described above, which is Antigravity's own CLI talking to its own backend
-  — this tool only invokes it and parses the reply.
+- **No data leaves your machine** except the `claude -p /usage` and
+  `agy -p /usage` calls described above, which are each tool's own CLI
+  talking to its own backend — this tool only invokes them and parses the
+  reply.
 - Session logs can contain your actual prompts, file paths, and code. This
   tool only ever extracts token counts, model names, and timestamps from
   them — project directories, working-directory paths, and conversation text
   are read where present (needed to group by session) but are **never**
   included in any table, chart, or `--json` output.
-- `~/.claude.json` also contains OAuth-adjacent account fields (e.g. an
-  account UUID); only the `cachedUsageUtilization` numbers are read out of it.
 - The editable pricing file lives at `~/.agent-usage/pricing.json`, outside
   this repository, so your configured rates never end up in version control.
 
