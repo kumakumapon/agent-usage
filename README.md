@@ -65,6 +65,8 @@ show a `—` in the Cost column instead of a guessed number.
 agent-usage limits
 agent-usage limits --tool antigravity
 agent-usage limits --json
+agent-usage limits --watch                  # dashboard mode, refreshes every 30s
+agent-usage limits --watch --interval 60     # custom refresh interval (seconds, min 10)
 ```
 
 Reads:
