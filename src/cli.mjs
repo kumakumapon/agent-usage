@@ -11,15 +11,17 @@ import { formatInt, formatCompact, formatCost, formatAge, formatUntil, renderTab
 const HELP = `Usage: agent-usage [command] [options]
 
 Commands:
-  limits (default)   Current rate-limit / quota utilization: read from local
-                     cache for Claude/Codex, and via a live \`agy -p /usage\`
-                     call for Antigravity (its quota is never written to disk).
+  limits (default)   Current rate-limit / quota utilization: a live query for
+                     Claude (\`claude -p /usage\`) and Antigravity
+                     (\`agy -p /usage\`), and local session logs for Codex.
   usage               Token usage (by model or by day) for Claude Code CLI and
                      Codex CLI from their session logs, plus Antigravity's
                      local activity; run this explicitly to see it.
 
 Options:
   --tool <name>     Limit to one tool: claude, codex, antigravity, all (default: all)
+  --watch               [limits only] Redraw like a dashboard, re-fetching on an interval
+  --interval <sec>       [limits only] Refresh interval in seconds for --watch (default: 30)
   --by <mode>        [usage only] Group rows by: model (default) or day
   --since <date>      [usage only] Only include usage on/after this date (YYYY-MM-DD)
   --until <date>       [usage only] Only include usage on/before this date (YYYY-MM-DD)
@@ -49,6 +51,8 @@ function parseCliArgs(argv) {
       since: { type: 'string' },
       until: { type: 'string' },
       chart: { type: 'boolean', default: false },
+      watch: { type: 'boolean', default: false },
+      interval: { type: 'string' },
       json: { type: 'boolean', default: false },
       pricing: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
@@ -268,8 +272,41 @@ function printLimits(result) {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function watchLimits(tools, intervalSec) {
+  let stopped = false;
+  process.on('SIGINT', () => {
+    stopped = true;
+    console.log('\n\nStopped watching.');
+    process.exit(0);
+  });
+
+  while (!stopped) {
+    const result = await gatherLimits(tools);
+    console.clear();
+    console.log(`agent-usage limits — watching (refresh every ${intervalSec}s, Ctrl+C to stop)`);
+    console.log(`last updated: ${new Date().toLocaleString()}`);
+    printLimits(result);
+    console.log('');
+    await sleep(intervalSec * 1000);
+  }
+}
+
 async function runLimits(args) {
   const tools = args.tool === 'all' ? ['claude', 'codex', 'antigravity'] : args.tool.split(',');
+
+  if (args.watch) {
+    if (args.json) {
+      console.error('--watch cannot be combined with --json');
+      process.exitCode = 1;
+      return;
+    }
+    const intervalSec = Math.max(10, Number(args.interval) || 30);
+    await watchLimits(tools, intervalSec);
+    return;
+  }
+
   const result = await gatherLimits(tools);
 
   if (args.json) {
