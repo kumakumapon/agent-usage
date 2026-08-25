@@ -222,7 +222,7 @@ function limitsTable(windows) {
 
 async function gatherLimits(tools) {
   const result = {};
-  if (tools.includes('claude')) result.claude = readClaudeRateLimit();
+  if (tools.includes('claude')) result.claude = await readClaudeRateLimit();
   if (tools.includes('codex')) result.codex = await readCodexRateLimit();
   if (tools.includes('antigravity')) result.antigravity = await readAntigravityRateLimit();
   return result;
@@ -231,23 +231,12 @@ async function gatherLimits(tools) {
 function printLimits(result) {
   if ('claude' in result) {
     console.log('\nClaude Code CLI rate limits');
-    if (result.claude) {
-      console.log(limitsTable(result.claude.windows));
-      const age = formatAge(result.claude.fetchedAt);
-      console.log(`  as of: ${result.claude.fetchedAt} (${age})`);
-      const now = Date.now();
-      const expired = result.claude.windows.some((w) => w.resetsAt && new Date(w.resetsAt).getTime() < now);
-      if (expired) {
-        console.log(
-          '  WARNING: at least one reset time above is already in the past — this cache is stale and the',
-        );
-        console.log(
-          '  numbers no longer reflect reality. Claude Code only refreshes this cache when you view usage',
-        );
-        console.log('  inside the CLI (the /usage screen). Do that once, then re-run this command.');
-      }
+    const cl = result.claude;
+    if (cl?.windows) {
+      console.log(limitsTable(cl.windows));
+      console.log(`  as of: ${cl.fetchedAt} (live query via \`claude -p /usage\`)`);
     } else {
-      console.log('  no cached rate-limit data found (run Claude Code at least once)');
+      console.log(`  could not fetch: ${cl?.error || 'unknown error'}`);
     }
   }
 
