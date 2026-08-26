@@ -79,12 +79,10 @@ Reads:
   LLM turn (it reports `num_turns: 0` and `total_cost_usd: 0`), that itself
   talks to Anthropic's backend to fetch your quota. It requires `claude` on
   PATH and an active login.
-- **Codex CLI**: the `rate_limits` snapshot embedded in the most recent
-  `token_count` event across your session logs (checks the ~20
-  most-recently-modified session files). Unlike Claude Code and Antigravity,
-  Codex CLI has no free/live status query — any live check would require
-  sending a real prompt and consuming actual quota — so this reads the last
-  snapshot already recorded from your normal usage instead.
+- **Codex CLI**: **a live query.** This starts `codex app-server --stdio` and
+  sends its structured, read-only `account/rateLimits/read` request. It uses
+  your existing Codex login and fetches current quota without creating an
+  agent turn or sending a prompt. It requires `codex` on PATH and an active login.
 - **Antigravity (`agy`)**: **also a live query.** Antigravity never writes
   its quota percentage to disk, so there is no file to read. Instead this
   runs `agy -p "/usage" --output-format json` as a child process and parses

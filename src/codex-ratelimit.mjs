@@ -1,67 +1,65 @@
-import fs from 'node:fs';
-import readline from 'node:readline';
-import { CODEX_SESSIONS_DIR } from './paths.mjs';
-import { walkJsonlRecursive } from './codex-usage.mjs';
+import { spawn } from 'node:child_process';
 
-async function lastLines(filePath, n) {
-  // Session files are small (one per conversation), so reading fully and
-  // keeping a ring buffer of the tail is simpler than seeking from the end.
-  const rl = readline.createInterface({
-    input: fs.createReadStream(filePath, { encoding: 'utf8' }),
-    crlfDelay: Infinity,
-  });
-  const buf = [];
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    buf.push(line);
-    if (buf.length > n) buf.shift();
+const TIMEOUT_MS = 30_000;
+
+/** Fetch current quota through Codex's read-only app-server protocol. */
+export async function readCodexRateLimit() {
+  try {
+    const result = await requestRateLimits();
+    const limits = result.rateLimits;
+    if (!limits) return { error: 'unexpected rate-limit response from codex app-server' };
+    const windows = [];
+    if (limits.primary) windows.push({ window: 'primary', ...limits.primary });
+    if (limits.secondary) windows.push({ window: 'secondary', ...limits.secondary });
+    return {
+      fetchedAt: new Date().toISOString(),
+      planType: limits.planType || null,
+      windows: windows.map((w) => ({
+        window: w.window,
+        percent: w.usedPercent ?? null,
+        resetsAt: w.resetsAt ? new Date(w.resetsAt * 1000).toISOString() : null,
+        windowMinutes: w.windowDurationMins ?? null,
+      })),
+      credits: limits.credits || null,
+    };
+  } catch (err) {
+    return { error: err.message || String(err) };
   }
-  return buf;
 }
 
-/**
- * Codex CLI embeds a `rate_limits` snapshot in every token_count event,
- * reflecting the server's response to the most recent API call. We only
- * need the freshest one, so we check the most-recently-modified session
- * files (newest first) until we find a token_count event with rate_limits.
- * @returns {Promise<object|null>}
- */
-export async function readCodexRateLimit() {
-  const files = [...walkJsonlRecursive(CODEX_SESSIONS_DIR)]
-    .map((f) => ({ f, mtime: fs.statSync(f).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime)
-    .slice(0, 20)
-    .map((x) => x.f);
-
-  for (const filePath of files) {
-    const lines = await lastLines(filePath, 50);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      let entry;
-      try {
-        entry = JSON.parse(lines[i]);
-      } catch {
-        continue;
+function requestRateLimits() {
+  return new Promise((resolve, reject) => {
+    const windows = process.platform === 'win32';
+    const command = windows ? 'cmd.exe' : 'codex';
+    const args = windows ? ['/d', '/s', '/c', 'codex app-server --stdio'] : ['app-server', '--stdio'];
+    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let buffered = '';
+    let stderr = '';
+    let done = false;
+    const timeout = setTimeout(() => finish(reject, new Error('timed out waiting for Codex app-server')), TIMEOUT_MS);
+    const finish = (fn, value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      child.kill();
+      fn(value);
+    };
+    const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
+    child.on('error', (err) => finish(reject, new Error(err.code === 'ENOENT' ? 'codex not found on PATH' : err.message)));
+    child.on('exit', (code) => { if (!done) finish(reject, new Error(stderr.trim() || `codex app-server exited with code ${code}`)); });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stdout.on('data', (chunk) => {
+      buffered += chunk;
+      const lines = buffered.split(/\r?\n/);
+      buffered = lines.pop();
+      for (const line of lines) {
+        try {
+          const message = JSON.parse(line);
+          if (message.id === 1) send({ id: 2, method: 'account/rateLimits/read' });
+          if (message.id === 2) message.error ? finish(reject, new Error(message.error.message)) : finish(resolve, message.result);
+        } catch { /* Ignore notifications. */ }
       }
-      if (entry.type !== 'event_msg' || entry.payload?.type !== 'token_count') continue;
-      const rl = entry.payload.rate_limits;
-      if (!rl) continue;
-
-      const windows = [];
-      if (rl.primary) windows.push({ window: 'primary', ...rl.primary });
-      if (rl.secondary) windows.push({ window: 'secondary', ...rl.secondary });
-
-      return {
-        fetchedAt: entry.timestamp || null,
-        planType: rl.plan_type || null,
-        windows: windows.map((w) => ({
-          window: w.window,
-          percent: w.used_percent ?? null,
-          resetsAt: w.resets_at ? new Date(w.resets_at * 1000).toISOString() : null,
-          windowMinutes: w.window_minutes ?? null,
-        })),
-        credits: rl.credits || null,
-      };
-    }
-  }
-  return null;
+    });
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'agent-usage', version: '0.1.0' }, capabilities: {} } });
+  });
 }
