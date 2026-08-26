@@ -246,17 +246,12 @@ function printLimits(result) {
 
   if ('codex' in result) {
     console.log('\nCodex CLI rate limits');
-    if (result.codex) {
+    if (result.codex?.windows) {
       console.log(limitsTable(result.codex.windows));
       console.log(`  plan: ${result.codex.planType || 'unknown'}`);
-      console.log(`  as of: ${result.codex.fetchedAt} (${formatAge(result.codex.fetchedAt)}, last recorded API response)`);
-      const now = Date.now();
-      if (result.codex.windows.some((w) => w.resetsAt && new Date(w.resetsAt).getTime() < now)) {
-        console.log('  WARNING: at least one reset time above is already in the past — Codex hasn\'t made an');
-        console.log('  API call since then, so this is stale. Run Codex once to refresh, then re-run this command.');
-      }
+      console.log(`  as of: ${result.codex.fetchedAt} (live query via \`codex app-server\`)`);
     } else {
-      console.log('  no rate-limit data found in recent session logs');
+      console.log(`  could not fetch: ${result.codex?.error || 'unknown error'}`);
     }
   }
 
