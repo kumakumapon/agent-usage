@@ -124,10 +124,14 @@ export async function readClaudeRateLimit() {
 function runCli(command, args) {
   return new Promise((resolve, reject) => {
     const windows = process.platform === 'win32';
+    // `detached: true` (CREATE_NEW_PROCESS_GROUP on Windows) was tried here
+    // to isolate this child from the parent console group, but it's what
+    // was crashing the whole tmux/psmux session on a second `agent-usage`
+    // run - confirmed by bisection. Leave it off; taskkill in
+    // terminateChildTree still reaps the process tree.
     const child = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: windows,
-      detached: windows,
       shell: false,
     });
     let stdout = '';
