@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 
 const TIMEOUT_MS = 30_000;
 
@@ -30,9 +32,20 @@ export async function readCodexRateLimit() {
 function requestRateLimits() {
   return new Promise((resolve, reject) => {
     const windows = process.platform === 'win32';
-    const command = windows ? 'cmd.exe' : 'codex';
-    const args = windows ? ['/d', '/s', '/c', 'codex app-server --stdio'] : ['app-server', '--stdio'];
-    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const command = windows ? findWindowsCodexExecutable() : 'codex';
+    const args = ['app-server', '--stdio'];
+    // `detached` creates a separate Windows console process group. Together
+    // with `windowsHide`, this keeps the child out of the host console group
+    // without showing the console that Windows allocates for it.
+    //
+    // Do not launch the npm `codex.cmd` shim through cmd.exe here: it adds a
+    // shell process and was the source of the visible-console behaviour.
+    const child = spawn(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: windows,
+      detached: windows,
+      shell: false,
+    });
     let buffered = '';
     let stderr = '';
     let done = false;
@@ -62,4 +75,33 @@ function requestRateLimits() {
     });
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'agent-usage', version: '0.1.0' }, capabilities: {} } });
   });
+}
+
+/**
+ * Prefer Codex's native executable over the npm .cmd shim on Windows.
+ * `CODEX_CLI_PATH` permits an explicit standalone/custom installation; the
+ * remaining candidates cover the standalone installer and npm's optional
+ * platform package layout.
+ */
+function findWindowsCodexExecutable() {
+  if (process.env.CODEX_CLI_PATH) return process.env.CODEX_CLI_PATH;
+
+  const platform = process.arch === 'arm64' ? 'win32-arm64' : 'win32-x64';
+  const target = process.arch === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc';
+  const pathEntries = (process.env.Path || process.env.PATH || '').split(delimiter).filter(Boolean);
+
+  for (const directory of pathEntries) {
+    const candidates = [
+      join(directory, 'codex.exe'),
+      join(directory, 'node_modules', '@openai', `codex-${platform}`, 'vendor', target, 'codex.exe'),
+      join(directory, 'node_modules', '@openai', `codex-${platform}`, 'vendor', target, 'bin', 'codex.exe'),
+      join(directory, 'node_modules', '@openai', 'codex', 'node_modules', '@openai', `codex-${platform}`, 'vendor', target, 'codex.exe'),
+      join(directory, 'node_modules', '@openai', 'codex', 'node_modules', '@openai', `codex-${platform}`, 'vendor', target, 'bin', 'codex.exe'),
+    ];
+    const executable = candidates.find(existsSync);
+    if (executable) return executable;
+  }
+
+  // Let spawn produce the usual ENOENT error when Codex is not installed.
+  return 'codex.exe';
 }

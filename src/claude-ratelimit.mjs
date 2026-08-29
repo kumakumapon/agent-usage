@@ -92,7 +92,12 @@ export async function readClaudeRateLimit() {
     ({ stdout } = await execFileAsync(
       'claude',
       ['-p', '/usage', '--output-format', 'json'],
-      { timeout: 30_000, windowsHide: true },
+      // `claude` is a native executable (not a .cmd shim), so this never
+      // goes through cmd.exe/shell. `detached` on Windows gives it its own
+      // console process group so it doesn't share the parent console's
+      // Ctrl+C/close broadcast; `windowsHide` keeps the console Windows
+      // allocates for that group invisible. See codex-ratelimit.mjs.
+      { timeout: 30_000, windowsHide: true, detached: process.platform === 'win32' },
     ));
   } catch (err) {
     return { error: err.code === 'ENOENT' ? 'claude not found on PATH' : (err.message || String(err)) };
