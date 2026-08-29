@@ -19,7 +19,9 @@ export async function readAntigravityRateLimit() {
     ({ stdout } = await execFileAsync(
       'agy',
       ['-p', '/usage', '--output-format', 'json'],
-      { timeout: 30_000, windowsHide: true },
+      // See claude-ratelimit.mjs: detach on Windows so this child gets its
+      // own console process group instead of sharing the parent's.
+      { timeout: 30_000, windowsHide: true, detached: process.platform === 'win32' },
     ));
   } catch (err) {
     return { error: err.code === 'ENOENT' ? 'agy not found on PATH' : (err.message || String(err)) };

@@ -32,7 +32,11 @@ function requestRateLimits() {
     const windows = process.platform === 'win32';
     const command = windows ? 'cmd.exe' : 'codex';
     const args = windows ? ['/d', '/s', '/c', 'codex app-server --stdio'] : ['app-server', '--stdio'];
-    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    // detached on Windows creates a new console process group, so this
+    // child (and the codex app-server it spawns) doesn't share the parent
+    // console's Ctrl+C/close broadcast with whatever is hosting that
+    // console, e.g. a terminal multiplexer.
+    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: windows });
     let buffered = '';
     let stderr = '';
     let done = false;

@@ -92,7 +92,11 @@ export async function readClaudeRateLimit() {
     ({ stdout } = await execFileAsync(
       'claude',
       ['-p', '/usage', '--output-format', 'json'],
-      { timeout: 30_000, windowsHide: true },
+      // detached on Windows creates a new console process group, so this
+      // child doesn't share the parent console's Ctrl+C/close broadcast
+      // (which would otherwise also hit whatever is hosting that console,
+      // e.g. a terminal multiplexer).
+      { timeout: 30_000, windowsHide: true, detached: process.platform === 'win32' },
     ));
   } catch (err) {
     return { error: err.code === 'ENOENT' ? 'claude not found on PATH' : (err.message || String(err)) };
