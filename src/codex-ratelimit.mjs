@@ -34,16 +34,16 @@ function requestRateLimits() {
     const windows = process.platform === 'win32';
     const command = windows ? findWindowsCodexExecutable() : 'codex';
     const args = ['app-server', '--stdio'];
-    // `detached` creates a separate Windows console process group. Together
-    // with `windowsHide`, this keeps the child out of the host console group
-    // without showing the console that Windows allocates for it.
-    //
     // Do not launch the npm `codex.cmd` shim through cmd.exe here: it adds a
-    // shell process and was the source of the visible-console behaviour.
+    // shell process and was the source of a visible-console regression.
+    //
+    // `detached: true` (CREATE_NEW_PROCESS_GROUP) was tried to isolate this
+    // child from the parent console group, but it's what was crashing the
+    // whole tmux/psmux session on a second `agent-usage` run - confirmed by
+    // bisection. Leave it off; taskkill below still reaps the process tree.
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: windows,
-      detached: windows,
       shell: false,
     });
     let buffered = '';

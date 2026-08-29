@@ -54,10 +54,12 @@ export async function readAntigravityRateLimit() {
 function runCli(command, args) {
   return new Promise((resolve, reject) => {
     const windows = process.platform === 'win32';
+    // See claude-ratelimit.mjs: `detached: true` was tried here but is what
+    // was crashing the whole tmux/psmux session on a second `agent-usage`
+    // run. Leave it off; taskkill in terminateChildTree still reaps the tree.
     const child = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: windows,
-      detached: windows,
       shell: false,
     });
     let stdout = '';
