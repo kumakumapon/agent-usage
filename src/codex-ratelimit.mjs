@@ -49,17 +49,17 @@ function requestRateLimits() {
     let buffered = '';
     let stderr = '';
     let done = false;
-    const timeout = setTimeout(() => finish(reject, new Error('timed out waiting for Codex app-server')), TIMEOUT_MS);
-    const finish = (fn, value) => {
+    const timeout = setTimeout(() => { void finish(reject, new Error('timed out waiting for Codex app-server')); }, TIMEOUT_MS);
+    const finish = async (fn, value) => {
       if (done) return;
       done = true;
       clearTimeout(timeout);
-      child.kill();
+      await terminateChildTree(child);
       fn(value);
     };
     const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
-    child.on('error', (err) => finish(reject, new Error(err.code === 'ENOENT' ? 'codex not found on PATH' : err.message)));
-    child.on('exit', (code) => { if (!done) finish(reject, new Error(stderr.trim() || `codex app-server exited with code ${code}`)); });
+    child.on('error', (err) => { void finish(reject, new Error(err.code === 'ENOENT' ? 'codex not found on PATH' : err.message)); });
+    child.on('exit', (code) => { if (!done) void finish(reject, new Error(stderr.trim() || `codex app-server exited with code ${code}`)); });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.stdout.on('data', (chunk) => {
       buffered += chunk;
@@ -69,7 +69,10 @@ function requestRateLimits() {
         try {
           const message = JSON.parse(line);
           if (message.id === 1) send({ id: 2, method: 'account/rateLimits/read' });
-          if (message.id === 2) message.error ? finish(reject, new Error(message.error.message)) : finish(resolve, message.result);
+          if (message.id === 2) {
+            if (message.error) void finish(reject, new Error(message.error.message));
+            else void finish(resolve, message.result);
+          }
         } catch { /* Ignore notifications. */ }
       }
     });
@@ -104,4 +107,29 @@ function findWindowsCodexExecutable() {
 
   // Let spawn produce the usual ENOENT error when Codex is not installed.
   return 'codex.exe';
+}
+
+function terminateChildTree(child) {
+  if (process.platform !== 'win32' || !child.pid || child.exitCode !== null) {
+    child.kill();
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    // This helper is short-lived and is deliberately not detached; only the
+    // queried CLI gets an isolated console process group.
+    const taskkill = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
+      stdio: 'ignore',
+      windowsHide: true,
+      shell: false,
+    });
+    taskkill.once('error', () => {
+      child.kill();
+      resolve();
+    });
+    taskkill.once('close', (code) => {
+      if (code !== 0) child.kill();
+      resolve();
+    });
+  });
 }
