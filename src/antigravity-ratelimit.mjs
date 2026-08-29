@@ -19,8 +19,7 @@ export async function readAntigravityRateLimit() {
     ({ stdout } = await execFileAsync(
       'agy',
       ['-p', '/usage', '--output-format', 'json'],
-      // See claude-ratelimit.mjs: detach on Windows so this child gets its
-      // own console process group instead of sharing the parent's.
+      // `agy` is a native executable (not a .cmd shim). See claude-ratelimit.mjs.
       { timeout: 30_000, windowsHide: true, detached: process.platform === 'win32' },
     ));
   } catch (err) {

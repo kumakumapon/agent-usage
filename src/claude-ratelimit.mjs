@@ -92,10 +92,11 @@ export async function readClaudeRateLimit() {
     ({ stdout } = await execFileAsync(
       'claude',
       ['-p', '/usage', '--output-format', 'json'],
-      // detached on Windows creates a new console process group, so this
-      // child doesn't share the parent console's Ctrl+C/close broadcast
-      // (which would otherwise also hit whatever is hosting that console,
-      // e.g. a terminal multiplexer).
+      // `claude` is a native executable (not a .cmd shim), so this never
+      // goes through cmd.exe/shell. `detached` on Windows gives it its own
+      // console process group so it doesn't share the parent console's
+      // Ctrl+C/close broadcast; `windowsHide` keeps the console Windows
+      // allocates for that group invisible. See codex-ratelimit.mjs.
       { timeout: 30_000, windowsHide: true, detached: process.platform === 'win32' },
     ));
   } catch (err) {
