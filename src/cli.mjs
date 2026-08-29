@@ -267,24 +267,34 @@ function printLimits(result) {
   }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function watchLimits(tools, intervalSec) {
   let stopped = false;
+  let wake = null;
+
+  // Stop by letting the loop below unwind on its own, instead of
+  // process.exit()-ing immediately: a hard exit mid-fetch would skip the
+  // taskkill cleanup in the claude/codex/agy readers and leave their child
+  // processes running.
   process.on('SIGINT', () => {
+    if (stopped) return;
     stopped = true;
     console.log('\n\nStopped watching.');
-    process.exit(0);
+    if (wake) wake();
   });
 
   while (!stopped) {
     const result = await gatherLimits(tools);
+    if (stopped) break;
     console.clear();
     console.log(`agent-usage limits — watching (refresh every ${intervalSec}s, Ctrl+C to stop)`);
     console.log(`last updated: ${new Date().toLocaleString()}`);
     printLimits(result);
     console.log('');
-    await sleep(intervalSec * 1000);
+    await new Promise((resolve) => {
+      wake = resolve;
+      setTimeout(resolve, intervalSec * 1000);
+    });
+    wake = null;
   }
 }
 
