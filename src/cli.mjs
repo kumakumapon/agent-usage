@@ -21,7 +21,7 @@ Commands:
 Options:
   --tool <name>     Limit to one tool: claude, codex, antigravity, all (default: all)
   --watch               [limits only] Redraw like a dashboard, re-fetching on an interval
-  --interval <sec>       [limits only] Refresh interval in seconds for --watch (default: 30)
+  --interval <sec>       [limits only] Refresh interval in seconds for --watch (default: 30, minimum: 10)
   --by <mode>        [usage only] Group rows by: model (default) or day
   --since <date>      [usage only] Only include usage on/after this date (YYYY-MM-DD)
   --until <date>       [usage only] Only include usage on/before this date (YYYY-MM-DD)
