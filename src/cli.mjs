@@ -19,7 +19,9 @@ Commands:
                      local activity; run this explicitly to see it.
 
 Options:
-  --tool <name>     Limit to one tool: claude, codex, antigravity, all (default: all)
+  --tool <name>     Limit to one tool: claude, codex, antigravity, all
+                     (default: claude,codex — antigravity is opt-in;
+                     pass --tool antigravity or --tool all to include it)
   --watch               [limits only] Redraw like a dashboard, re-fetching on an interval
   --interval <sec>       [limits only] Refresh interval in seconds for --watch (default: 30, minimum: 10)
   --by <mode>        [usage only] Group rows by: model (default) or day
@@ -46,7 +48,7 @@ function parseCliArgs(argv) {
     args: filtered,
     allowPositionals: true,
     options: {
-      tool: { type: 'string', default: 'all' },
+      tool: { type: 'string' },
       by: { type: 'string', default: 'model' },
       since: { type: 'string' },
       until: { type: 'string' },
@@ -60,6 +62,15 @@ function parseCliArgs(argv) {
   });
   const command = positionals[0] === 'usage' ? 'usage' : 'limits';
   return { ...values, command, limits: !noLimits };
+}
+
+// antigravity is opt-in: it must be named explicitly (or via --tool all),
+// since it reports activity counts rather than the token/limit data claude
+// and codex give.
+function resolveTools(toolArg) {
+  if (!toolArg) return ['claude', 'codex'];
+  if (toolArg === 'all') return ['claude', 'codex', 'antigravity'];
+  return toolArg.split(',');
 }
 
 function inDateRange(timestamp, since, until) {
@@ -299,7 +310,7 @@ async function watchLimits(tools, intervalSec) {
 }
 
 async function runLimits(args) {
-  const tools = args.tool === 'all' ? ['claude', 'codex', 'antigravity'] : args.tool.split(',');
+  const tools = resolveTools(args.tool);
 
   if (args.watch) {
     if (args.json) {
@@ -341,7 +352,7 @@ export async function run(argv) {
     return;
   }
 
-  const tools = args.tool === 'all' ? ['claude', 'codex', 'antigravity'] : args.tool.split(',');
+  const tools = resolveTools(args.tool);
   const by = args.by === 'day' ? 'day' : 'model';
   const pricing = loadPricing();
 
