@@ -1,0 +1,31 @@
+{
+  "name": "agent-usage-gui",
+  "version": "0.1.0",
+  "description": "Windows system-tray app showing live Claude Code / Codex / Antigravity rate-limit usage, built on agent-usage's own readers.",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "dev.agent-usage.gui",
+    "productName": "Agent Usage",
+    "win": {
+      "target": "nsis"
+    },
+    "files": [
+      "**/*",
+      "!dist/**",
+      "../src/**/*.mjs"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

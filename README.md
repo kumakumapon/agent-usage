@@ -92,6 +92,12 @@ Reads:
   requires `agy` on PATH and an active login; it takes roughly 5-10 seconds
   to start the CLI process.
 
+## Windows GUI
+
+A system-tray app (Electron) is available under [`gui/`](gui/) for Windows —
+shows live rate-limit gauges in a tray popup instead of a terminal, built on
+the same local readers as `limits`/`--watch`. See [`gui/README.md`](gui/README.md).
+
 ## Privacy notes
 
 - **No data leaves your machine** except the `claude -p /usage` and
