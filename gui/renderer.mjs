@@ -3,6 +3,7 @@ const TOOL_LABEL = { claude: 'Claude Code', codex: 'Codex CLI', antigravity: 'An
 const content = document.getElementById('content');
 const updated = document.getElementById('updated');
 const refreshBtn = document.getElementById('refresh');
+const hideBtn = document.getElementById('hide');
 
 function levelClass(percent) {
   if (percent >= 90) return 'lvl-crit';
@@ -69,6 +70,10 @@ window.agentUsage.onUpdate(({ result, fetchedAt }) => {
 refreshBtn.addEventListener('click', () => {
   updated.textContent = 'refreshing…';
   void window.agentUsage.refresh();
+});
+
+hideBtn.addEventListener('click', () => {
+  void window.agentUsage.hide();
 });
 
 window.agentUsage.requestLimits().then((result) => {

@@ -15,13 +15,19 @@ npm install
 npm start
 ```
 
-This adds a tray icon that:
+This adds a small always-on-top widget (bottom-right corner by default,
+draggable by its header) showing gauges and reset times for each enabled
+tool, plus a tray icon that:
 
 - shows a per-window usage tooltip on hover
-- opens a small popup (click) with gauges and reset times for each enabled tool
+- click toggles the widget's visibility (it stays open otherwise — it does
+  not hide itself when it loses focus)
 - refreshes every 30s in the background
-- right-click for: refresh now, toggle Claude/Codex/Antigravity, "Start with
-  Windows", and Quit
+- right-click for: show/hide the widget, refresh now, toggle
+  Claude/Codex/Antigravity, "Start with Windows", and Quit
+
+The widget's own ✕ button hides it (same as clicking the tray icon); use the
+tray icon or its right-click menu to bring it back.
 
 Claude Code and Codex are enabled by default (matching the CLI's default);
 Antigravity is opt-in from the tray menu since it needs the `agy` CLI logged

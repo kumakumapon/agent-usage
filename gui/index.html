@@ -21,13 +21,15 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px 6px;
+    -webkit-app-region: drag;
   }
   header h1 { font-size: 13px; font-weight: 600; margin: 0; }
   header .meta { font-size: 11px; color: #8a90a0; }
-  #refresh {
-    background: none; border: none; color: #8a90a0; cursor: pointer; font-size: 13px;
+  header .actions { -webkit-app-region: no-drag; display: flex; gap: 6px; align-items: center; }
+  #refresh, #hide {
+    background: none; border: none; color: #8a90a0; cursor: pointer; font-size: 13px; padding: 2px 4px;
   }
-  #refresh:hover { color: #e6e9ef; }
+  #refresh:hover, #hide:hover { color: #e6e9ef; }
   main { padding: 4px 12px 12px; max-height: 380px; overflow-y: auto; }
   section { margin-bottom: 14px; }
   section h2 {
@@ -52,9 +54,10 @@
 <body>
   <header>
     <h1>agent-usage</h1>
-    <div>
+    <div class="actions">
       <span class="meta" id="updated"></span>
       <button id="refresh" title="Refresh now">&#8635;</button>
+      <button id="hide" title="Hide (reopen from the tray icon)">&#10005;</button>
     </div>
   </header>
   <main id="content">
