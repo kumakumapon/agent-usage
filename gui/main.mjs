@@ -1,13 +1,20 @@
 import { app, Tray, Menu, BrowserWindow, nativeImage, ipcMain, screen } from 'electron';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
-
-import { readClaudeRateLimit } from '../src/claude-ratelimit.mjs';
-import { readCodexRateLimit } from '../src/codex-ratelimit.mjs';
-import { readAntigravityRateLimit } from '../src/antigravity-ratelimit.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_INTERVAL_MS = 30_000;
+
+// The rate-limit readers live in the repo's ../src (shared with the CLI).
+// In dev that's a real relative path; once packaged, electron-builder can't
+// place files from outside gui/ into app.asar, so they're copied instead to
+// resources/src via extraResources and must be found there at runtime.
+const srcDir = app.isPackaged ? join(process.resourcesPath, 'src') : join(__dirname, '..', 'src');
+const importSrc = (name) => import(pathToFileURL(join(srcDir, name)).href);
+
+const { readClaudeRateLimit } = await importSrc('claude-ratelimit.mjs');
+const { readCodexRateLimit } = await importSrc('codex-ratelimit.mjs');
+const { readAntigravityRateLimit } = await importSrc('antigravity-ratelimit.mjs');
 
 let tray = null;
 let win = null;

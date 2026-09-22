@@ -17,12 +17,18 @@
     "appId": "dev.agent-usage.gui",
     "productName": "Agent Usage",
     "win": {
-      "target": "nsis"
+      "target": ["portable", "nsis"]
     },
     "files": [
       "**/*",
-      "!dist/**",
-      "../src/**/*.mjs"
+      "!dist/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../src",
+        "to": "src",
+        "filter": ["**/*.mjs"]
+      }
     ],
     "directories": {
       "output": "dist"
