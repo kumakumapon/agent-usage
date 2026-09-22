@@ -93,38 +93,56 @@ function createWindow() {
     },
   });
   win.loadFile(join(__dirname, 'index.html'));
-  win.on('blur', () => {
-    if (win && !win.webContents.isDevToolsOpened()) win.hide();
-  });
+  // Widget mode: the window stays open once shown (no blur-hide) so it acts
+  // as a persistent always-on-top HUD instead of a tray popup that
+  // disappears the moment it loses focus.
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 }
 
-function positionWindowNearTray(bounds) {
-  if (!win) return;
+function defaultWindowPosition() {
   const { workArea } = screen.getPrimaryDisplay();
   const [winW, winH] = win.getSize();
-  let x = Math.round(bounds.x + bounds.width / 2 - winW / 2);
-  let y = Math.round(bounds.y + bounds.height);
-  // Windows taskbar is usually at the bottom, so the tray click gives a
-  // bounds.y near the bottom of the screen; place the popup above it there.
-  if (y + winH > workArea.y + workArea.height) y = bounds.y - winH;
-  x = Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - winW);
-  win.setPosition(x, y, false);
+  const margin = 16;
+  return {
+    x: workArea.x + workArea.width - winW - margin,
+    y: workArea.y + workArea.height - winH - margin,
+  };
 }
 
-function toggleWindow(bounds) {
+function showWindow() {
+  if (!win) return;
+  if (!win.isVisible()) {
+    const { x, y } = defaultWindowPosition();
+    win.setPosition(x, y, false);
+  }
+  win.show();
+  syncTrayMenu();
+  void poll();
+}
+
+function hideWindow() {
+  if (!win) return;
+  win.hide();
+  syncTrayMenu();
+}
+
+function toggleWindow() {
   if (!win) return;
   if (win.isVisible()) {
-    win.hide();
-    return;
+    hideWindow();
+  } else {
+    showWindow();
   }
-  positionWindowNearTray(bounds);
-  win.show();
-  win.focus();
-  void poll();
 }
 
 function buildContextMenu() {
   return Menu.buildFromTemplate([
+    {
+      label: 'Show window',
+      type: 'checkbox',
+      checked: win?.isVisible() ?? false,
+      click: () => toggleWindow(),
+    },
     { label: 'Refresh now', click: () => void poll() },
     { type: 'separator' },
     {
@@ -157,23 +175,28 @@ function buildContextMenu() {
   ]);
 }
 
+function syncTrayMenu() {
+  if (tray) tray.setContextMenu(buildContextMenu());
+}
+
 function createTray() {
   const icon = nativeImage.createFromPath(join(__dirname, 'assets', 'icon.png'));
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip('agent-usage — loading…');
-  tray.setContextMenu(buildContextMenu());
-  tray.on('click', (_event, bounds) => toggleWindow(bounds));
+  syncTrayMenu();
+  tray.on('click', () => toggleWindow());
 }
 
 ipcMain.handle('limits:request', () => lastResult);
 ipcMain.handle('limits:refresh', () => poll());
+ipcMain.handle('window:hide', () => hideWindow());
 
 app.whenReady().then(() => {
   app.setAppUserModelId('dev.agent-usage.gui');
   createWindow();
   createTray();
   schedulePoll();
-  void poll();
+  showWindow();
 });
 
 app.on('window-all-closed', (event) => {
