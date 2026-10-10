@@ -129,7 +129,13 @@ function clampToWorkArea() {
 function setLayout(mode) {
   if (!LAYOUTS[mode] || !win) return;
   layoutMode = mode;
+  // Some Windows/driver combinations ignore setSize() on a window created
+  // with resizable:false; toggling it around the resize is a cheap,
+  // harmless guard against that. The window still can't be manually
+  // resized since it's frameless (no border to drag).
+  win.setResizable(true);
   win.setSize(...LAYOUTS[mode].size);
+  win.setResizable(false);
   clampToWorkArea();
   win.webContents.send('layout:update', layoutMode);
   syncTrayMenu();
@@ -237,13 +243,23 @@ ipcMain.handle('limits:request', () => lastResult);
 ipcMain.handle('limits:refresh', () => poll());
 ipcMain.handle('window:hide', () => hideWindow());
 
-app.whenReady().then(() => {
-  app.setAppUserModelId('dev.agent-usage.gui');
-  createWindow();
-  createTray();
-  schedulePoll();
-  showWindow();
-});
+// Without this, running `npm start` (or launching the built exe) while an
+// older instance is still in the tray silently leaves two apps running —
+// easy to end up right-clicking a stale tray icon from a previous run while
+// believing you're testing the latest code.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => showWindow());
+
+  app.whenReady().then(() => {
+    app.setAppUserModelId('dev.agent-usage.gui');
+    createWindow();
+    createTray();
+    schedulePoll();
+    showWindow();
+  });
+}
 
 app.on('window-all-closed', (event) => {
   // A tray app has no "closing all windows" quit semantics — the tray icon
