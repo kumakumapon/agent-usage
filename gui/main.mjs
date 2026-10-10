@@ -24,6 +24,15 @@ let lastResult = null;
 
 const enabledTools = { claude: true, codex: true, antigravity: false };
 
+// Window size per layout — all portrait (taller than wide) so the widget
+// takes less horizontal desktop space than the original 380x420 box.
+const LAYOUTS = {
+  normal: { label: 'Normal', size: [380, 420] },
+  compact: { label: 'Compact', size: [240, 480] },
+  mini: { label: 'Mini', size: [140, 560] },
+};
+let layoutMode = 'normal';
+
 function toolLabel(name) {
   return { claude: 'Claude Code', codex: 'Codex CLI', antigravity: 'Antigravity' }[name];
 }
@@ -104,6 +113,26 @@ function createWindow() {
   // as a persistent always-on-top HUD instead of a tray popup that
   // disappears the moment it loses focus.
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.webContents.on('did-finish-load', () => win.webContents.send('layout:update', layoutMode));
+}
+
+function clampToWorkArea() {
+  if (!win) return;
+  const { workArea } = screen.getPrimaryDisplay();
+  const [winW, winH] = win.getSize();
+  const [x, y] = win.getPosition();
+  const clampedX = Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - winW);
+  const clampedY = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - winH);
+  win.setPosition(clampedX, clampedY, false);
+}
+
+function setLayout(mode) {
+  if (!LAYOUTS[mode] || !win) return;
+  layoutMode = mode;
+  win.setSize(...LAYOUTS[mode].size);
+  clampToWorkArea();
+  win.webContents.send('layout:update', layoutMode);
+  syncTrayMenu();
 }
 
 function defaultWindowPosition() {
@@ -151,6 +180,16 @@ function buildContextMenu() {
       click: () => toggleWindow(),
     },
     { label: 'Refresh now', click: () => void poll() },
+    { type: 'separator' },
+    {
+      label: 'Layout',
+      submenu: Object.entries(LAYOUTS).map(([mode, { label }]) => ({
+        label,
+        type: 'radio',
+        checked: layoutMode === mode,
+        click: () => setLayout(mode),
+      })),
+    },
     { type: 'separator' },
     {
       label: 'Claude Code',

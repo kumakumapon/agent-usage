@@ -76,6 +76,10 @@ hideBtn.addEventListener('click', () => {
   void window.agentUsage.hide();
 });
 
+window.agentUsage.onLayout((mode) => {
+  document.body.dataset.layout = mode;
+});
+
 window.agentUsage.requestLimits().then((result) => {
   if (result) render(result);
 });
