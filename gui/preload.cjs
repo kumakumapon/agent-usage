@@ -9,4 +9,9 @@ contextBridge.exposeInMainWorld('agentUsage', {
     ipcRenderer.on('limits:update', listener);
     return () => ipcRenderer.removeListener('limits:update', listener);
   },
+  onLayout: (callback) => {
+    const listener = (_event, mode) => callback(mode);
+    ipcRenderer.on('layout:update', listener);
+    return () => ipcRenderer.removeListener('layout:update', listener);
+  },
 });

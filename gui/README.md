@@ -29,6 +29,17 @@ tool, plus a tray icon that:
 The widget's own ✕ button hides it (same as clicking the tray icon); use the
 tray icon or its right-click menu to bring it back.
 
+### Layout
+
+Right-click the tray icon → **Layout** to pick how much space the widget
+takes, from the same screen's bottom-right corner. All three are portrait
+(taller than wide):
+
+- **Normal** (380×420) — full gauges, labels, and reset times
+- **Compact** (240×480) — same content, tighter spacing, no "last updated" line
+- **Mini** (140×560) — a thin vertical strip: just window names, percentages,
+  and bars (no reset times)
+
 Claude Code and Codex are enabled by default (matching the CLI's default);
 Antigravity is opt-in from the tray menu since it needs the `agy` CLI logged
 in.
