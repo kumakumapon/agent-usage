@@ -32,15 +32,18 @@ agent-usage [command] [options]
 
 ## Commands
 
-### `usage` (default) — token usage
+### `usage` — token usage
 
 ```sh
-agent-usage                              # summary for all three tools, by model
-agent-usage --tool claude --by day       # Claude Code, grouped by day
-agent-usage --tool codex --chart         # Codex, with a bar chart under the table
-agent-usage --since 2026-08-01 --until 2026-08-31
-agent-usage --json                       # machine-readable output
+agent-usage usage                        # summary for Claude Code and Codex, by model (plus the rate limits; --no-limits skips them)
+agent-usage usage --tool all             # include Antigravity
+agent-usage usage --tool claude --by day # Claude Code, grouped by day
+agent-usage usage --tool codex --chart   # Codex, with a bar chart under the table
+agent-usage usage --since 2026-08-01 --until 2026-08-31
+agent-usage usage --json                 # machine-readable output
 ```
+
+With no command, `agent-usage` runs `limits` (below), not `usage`.
 
 Reads:
 
@@ -63,7 +66,7 @@ Parsed results are cached per session file in `~/.agent-usage/cache/`, so repeat
 runs only read what was appended since the last one (a warm run is several times
 faster). Pass `--no-cache` to re-read everything; the cache is safe to delete.
 
-### `limits` — current rate-limit / quota utilization
+### `limits` (default) — current rate-limit / quota utilization
 
 ```sh
 agent-usage limits
@@ -95,6 +98,24 @@ Reads:
   itself talks to Google's Cloud Code backend to fetch your quota. It
   requires `agy` on PATH and an active login; it takes roughly 5-10 seconds
   to start the CLI process.
+
+### Command-line errors
+
+A mistake on the command line is caught before anything runs — no live query,
+no log reading, no pricing file — with a short message and **exit code 2**:
+
+```text
+$ agent-usage usgae
+agent-usage: unknown command "usgae" — did you mean "usage"? (valid commands: limits, usage)
+$ agent-usage limits --tool cdoex --json
+agent-usage: unknown tool "cdoex" — did you mean "codex"? (valid tools: claude, codex, antigravity, all)
+```
+
+This covers unknown commands, extra positional arguments, unknown options, and
+`--tool` values that are not `claude`, `codex`, `antigravity`, a comma-separated
+list of those, or `all` on its own. Scripts that relied on such input being
+ignored will now fail with exit code 2. Exit codes: 0 success, 1 runtime error,
+2 invalid command line. `--help` always works.
 
 ## Windows GUI
 
