@@ -22,7 +22,7 @@ tool, plus a tray icon that:
 - shows a per-window usage tooltip on hover
 - click toggles the widget's visibility (it stays open otherwise — it does
   not hide itself when it loses focus)
-- refreshes every 30s in the background
+- refreshes in the background (Codex every 30s, Claude every 2min, Antigravity every 5min; 4× slower while the widget is hidden)
 - right-click for: show/hide the widget, refresh now, toggle
   Claude/Codex/Antigravity, "Start with Windows", and Quit
 

@@ -3,7 +3,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_INTERVAL_MS = 30_000;
 
 // The rate-limit readers live in the repo's ../src (shared with the CLI).
 // In dev that's a real relative path; once packaged, electron-builder can't
@@ -19,7 +18,6 @@ const { readAntigravityRateLimit } = await importSrc('antigravity-ratelimit.mjs'
 let tray = null;
 let win = null;
 let pollTimer = null;
-let polling = false;
 let lastResult = null;
 
 const enabledTools = { claude: true, codex: true, antigravity: false };
@@ -37,12 +35,56 @@ function toolLabel(name) {
   return { claude: 'Claude Code', codex: 'Codex CLI', antigravity: 'Antigravity' }[name];
 }
 
-async function gatherLimits() {
+// Each tool is fetched independently so a slow one (agy takes 5-10s to
+// start) never delays the others' updates. Claude and Antigravity spawn a
+// CLI process per fetch, so they poll far less often than Codex.
+const TOOLS = {
+  claude: { read: readClaudeRateLimit, intervalMs: 120_000 },
+  codex: { read: readCodexRateLimit, intervalMs: 30_000 },
+  antigravity: { read: readAntigravityRateLimit, intervalMs: 300_000 },
+};
+// While the widget is hidden only the tray tooltip can go stale, so poll
+// that many times slower.
+const HIDDEN_INTERVAL_FACTOR = 4;
+const SCHEDULER_TICK_MS = 5_000;
+
+const toolState = Object.fromEntries(
+  Object.keys(TOOLS).map((name) => [name, { data: null, fetchedAt: 0, inFlight: false }]),
+);
+
+function currentResult() {
   const result = {};
-  if (enabledTools.claude) result.claude = await readClaudeRateLimit();
-  if (enabledTools.codex) result.codex = await readCodexRateLimit();
-  if (enabledTools.antigravity) result.antigravity = await readAntigravityRateLimit();
+  for (const name of Object.keys(TOOLS)) {
+    if (enabledTools[name] && toolState[name].data) result[name] = toolState[name].data;
+  }
   return result;
+}
+
+function publish() {
+  lastResult = currentResult();
+  if (tray) tray.setToolTip(tooltipFor(lastResult));
+  if (win) {
+    const latest = Math.max(0, ...Object.keys(lastResult).map((n) => toolState[n].fetchedAt));
+    win.webContents.send('limits:update', {
+      result: lastResult,
+      fetchedAt: new Date(latest || Date.now()).toISOString(),
+    });
+  }
+}
+
+async function fetchTool(name) {
+  const state = toolState[name];
+  if (state.inFlight) return;
+  state.inFlight = true;
+  try {
+    state.data = await TOOLS[name].read();
+  } catch (err) {
+    state.data = { error: err.message || String(err) };
+  } finally {
+    state.inFlight = false;
+    state.fetchedAt = Date.now();
+  }
+  if (enabledTools[name]) publish();
 }
 
 // Picks the single highest-utilization window across enabled tools, so the
@@ -75,21 +117,34 @@ function tooltipFor(result) {
   return lines.join('\n') || 'agent-usage';
 }
 
+// Manual refresh: fetches every enabled tool in parallel; each publishes
+// as soon as it lands.
 async function poll() {
-  if (polling) return;
-  polling = true;
-  try {
-    lastResult = await gatherLimits();
-    if (tray) tray.setToolTip(tooltipFor(lastResult));
-    if (win) win.webContents.send('limits:update', { result: lastResult, fetchedAt: new Date().toISOString() });
-  } finally {
-    polling = false;
+  const names = Object.keys(TOOLS).filter((n) => enabledTools[n]);
+  await Promise.allSettled(names.map(fetchTool));
+  // Clears the renderer's "refreshing…" even if every fetch was skipped as in-flight.
+  publish();
+}
+
+// Fetches only the tools whose data is older than their interval.
+function tick() {
+  const factor = win?.isVisible() ? 1 : HIDDEN_INTERVAL_FACTOR;
+  const now = Date.now();
+  for (const [name, { intervalMs }] of Object.entries(TOOLS)) {
+    if (!enabledTools[name]) continue;
+    if (now - toolState[name].fetchedAt >= intervalMs * factor) void fetchTool(name);
   }
 }
 
-function schedulePoll(intervalMs = DEFAULT_INTERVAL_MS) {
+function schedulePoll() {
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(poll, intervalMs);
+  pollTimer = setInterval(tick, SCHEDULER_TICK_MS);
+}
+
+function setToolEnabled(name, enabled) {
+  enabledTools[name] = enabled;
+  if (enabled && !toolState[name].data) void fetchTool(name);
+  else publish();
 }
 
 function createWindow() {
@@ -159,7 +214,8 @@ function showWindow() {
   }
   win.show();
   syncTrayMenu();
-  void poll();
+  publish();
+  tick();
 }
 
 function hideWindow() {
@@ -201,19 +257,19 @@ function buildContextMenu() {
       label: 'Claude Code',
       type: 'checkbox',
       checked: enabledTools.claude,
-      click: (item) => { enabledTools.claude = item.checked; void poll(); },
+      click: (item) => setToolEnabled('claude', item.checked),
     },
     {
       label: 'Codex CLI',
       type: 'checkbox',
       checked: enabledTools.codex,
-      click: (item) => { enabledTools.codex = item.checked; void poll(); },
+      click: (item) => setToolEnabled('codex', item.checked),
     },
     {
       label: 'Antigravity (requires agy CLI login)',
       type: 'checkbox',
       checked: enabledTools.antigravity,
-      click: (item) => { enabledTools.antigravity = item.checked; void poll(); },
+      click: (item) => setToolEnabled('antigravity', item.checked),
     },
     { type: 'separator' },
     {
