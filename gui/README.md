@@ -20,6 +20,9 @@ draggable by its header) showing gauges and reset times for each enabled
 tool, plus a tray icon that:
 
 - shows a per-window usage tooltip on hover
+- if a refresh fails, the last good reading stays on screen dimmed with a
+  "⚠ stale" badge, the error, and when it was last good (the header's
+  "updated" time is the last successful reading, not the last attempt)
 - click toggles the widget's visibility (it stays open otherwise — it does
   not hide itself when it loses focus)
 - refreshes in the background (Codex every 30s, Claude every 2min, Antigravity every 5min; 4× slower while the widget is hidden)

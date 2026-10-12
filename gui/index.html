@@ -48,6 +48,10 @@
   .lvl-warn > span { background: #f5a623; }
   .lvl-crit > span { background: #e5484d; }
   .error { color: #e5484d; font-size: 12px; }
+  /* Last good reading kept on screen after a failed refresh. */
+  section.stale .row { opacity: 0.55; }
+  .badge { color: #f5a623; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+  .stale-note { color: #f5a623; font-size: 11px; margin: 0; word-break: break-word; }
   .empty { color: #6b7180; font-size: 12px; }
 
   /* Compact: narrower, taller window — same layout, tighter spacing. */
@@ -70,6 +74,7 @@
     flex-direction: column; align-items: flex-start; gap: 1px; font-size: 10.5px;
   }
   body[data-layout="mini"] .row-label .resets { display: none; }
+  body[data-layout="mini"] .stale-note { display: none; }
   body[data-layout="mini"] .bar { height: 5px; }
 </style>
 </head>

@@ -89,13 +89,28 @@ const HIDDEN_INTERVAL_FACTOR = 4;
 const SCHEDULER_TICK_MS = 5_000;
 
 const toolState = Object.fromEntries(
-  Object.keys(TOOLS).map((name) => [name, { data: null, fetchedAt: 0, inFlight: false }]),
+  Object.keys(TOOLS).map((name) => [
+    name,
+    // data/lastOkAt: the last *successful* reading; error: the latest
+    // failure (cleared by the next success). fetchedAt is the last attempt.
+    { data: null, error: null, lastOkAt: 0, fetchedAt: 0, inFlight: false },
+  ]),
 );
+
+// What the widget sees for one tool. A failed refresh keeps showing the last
+// good reading, flagged `stale` with the error and when it was last good,
+// rather than blanking the gauges.
+function viewOf(state) {
+  if (!state.error) return state.data;
+  if (!state.data) return { error: state.error };
+  return { ...state.data, stale: true, error: state.error, lastOkAt: new Date(state.lastOkAt).toISOString() };
+}
 
 function currentResult() {
   const result = {};
   for (const name of Object.keys(TOOLS)) {
-    if (enabledTools[name] && toolState[name].data) result[name] = toolState[name].data;
+    const state = toolState[name];
+    if (enabledTools[name] && (state.data || state.error)) result[name] = viewOf(state);
   }
   return result;
 }
@@ -104,7 +119,8 @@ function publish() {
   lastResult = currentResult();
   if (tray) tray.setToolTip(tooltipFor(lastResult));
   if (win) {
-    const latest = Math.max(0, ...Object.keys(lastResult).map((n) => toolState[n].fetchedAt));
+    // "updated" means the last successful reading, not the last attempt.
+    const latest = Math.max(0, ...Object.keys(lastResult).map((n) => toolState[n].lastOkAt));
     win.webContents.send('limits:update', {
       result: lastResult,
       fetchedAt: new Date(latest || Date.now()).toISOString(),
@@ -117,9 +133,16 @@ async function fetchTool(name) {
   if (state.inFlight) return;
   state.inFlight = true;
   try {
-    state.data = await TOOLS[name].read();
+    const result = await TOOLS[name].read();
+    if (result?.error) {
+      state.error = result.error;
+    } else {
+      state.data = result;
+      state.error = null;
+      state.lastOkAt = Date.now();
+    }
   } catch (err) {
-    state.data = { error: err.message || String(err) };
+    state.error = err.message || String(err);
   } finally {
     state.inFlight = false;
     state.fetchedAt = Date.now();
@@ -146,12 +169,12 @@ function tooltipFor(result) {
   if (!worst) return 'agent-usage — no data yet';
   const lines = [];
   for (const [tool, data] of Object.entries(result)) {
-    if (data?.error) {
+    if (data?.error && !data.stale) {
       lines.push(`${toolLabel(tool)}: ${data.error}`);
       continue;
     }
     for (const w of data?.windows || []) {
-      lines.push(`${toolLabel(tool)} ${w.window}: ${w.percent ?? '?'}%`);
+      lines.push(`${toolLabel(tool)} ${w.window}: ${w.percent ?? '?'}%${data.stale ? ' (stale)' : ''}`);
     }
   }
   return lines.join('\n') || 'agent-usage';
