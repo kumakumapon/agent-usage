@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
+import { terminateChildTree } from './run-cli.mjs';
 
 const TIMEOUT_MS = 30_000;
 
@@ -15,7 +16,7 @@ export async function readCodexRateLimit() {
 
 /**
  * Maps an `account/rateLimits/read` result onto the shared window shape.
- * @param {object} result
+ * @param {any} result
  * @param {Date} [now]
  */
 export function normalizeCodexRateLimits(result, now = new Date()) {
@@ -66,13 +67,13 @@ function requestRateLimits() {
       fn(value);
     };
     const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
-    child.on('error', (err) => { void finish(reject, new Error(err.code === 'ENOENT' ? 'codex not found on PATH' : err.message)); });
+    child.on('error', (/** @type {NodeJS.ErrnoException} */ err) => { void finish(reject, new Error(err.code === 'ENOENT' ? 'codex not found on PATH' : err.message)); });
     child.on('exit', (code) => { if (!done) void finish(reject, new Error(stderr.trim() || `codex app-server exited with code ${code}`)); });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.stdout.on('data', (chunk) => {
       buffered += chunk;
       const lines = buffered.split(/\r?\n/);
-      buffered = lines.pop();
+      buffered = lines.pop() ?? '';
       for (const line of lines) {
         try {
           const message = JSON.parse(line);
@@ -115,29 +116,4 @@ function findWindowsCodexExecutable() {
 
   // Let spawn produce the usual ENOENT error when Codex is not installed.
   return 'codex.exe';
-}
-
-function terminateChildTree(child) {
-  if (process.platform !== 'win32' || !child.pid || child.exitCode !== null) {
-    child.kill();
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    // This helper is short-lived and is deliberately not detached; only the
-    // queried CLI gets an isolated console process group.
-    const taskkill = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
-      stdio: 'ignore',
-      windowsHide: true,
-      shell: false,
-    });
-    taskkill.once('error', () => {
-      child.kill();
-      resolve();
-    });
-    taskkill.once('close', (code) => {
-      if (code !== 0) child.kill();
-      resolve();
-    });
-  });
 }

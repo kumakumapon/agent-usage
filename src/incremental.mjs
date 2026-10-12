@@ -78,12 +78,12 @@ function saveCache(cachePath, files) {
  *
  * @param {object} opts
  * @param {string} opts.cacheName   file name under the cache dir
- * @param {Iterable<{filePath: string, meta?: object}>} opts.files
- * @param {(meta: object) => object} opts.newState  initial parser state for a file
- * @param {(entry: object, state: object, emit: (record: object) => void) => void} opts.parseEntry
+ * @param {Iterable<{filePath: string, meta?: any}>} opts.files
+ * @param {(meta: any) => any} opts.newState  initial parser state for a file
+ * @param {(entry: any, state: any, emit: (record: any) => void) => void} opts.parseEntry
  * @param {boolean} [opts.useCache=true]
  * @param {string} [opts.cacheDir]
- * @returns {Promise<Array<{filePath: string, records: object[]}>>} per-file records, in input order
+ * @returns {Promise<Array<{filePath: string, records: any[]}>>} per-file records, in input order
  */
 export async function collectIncremental({
   cacheName,

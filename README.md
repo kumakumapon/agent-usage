@@ -138,6 +138,19 @@ fetched live and never cached to disk either. This tool works around that by:
 If Antigravity ever documents its local storage format or adds a usage-export
 command, the token-based path can be filled in.
 
+## Development
+
+Running the CLI needs no install. Contributing does — the checks use a few dev
+dependencies (ESLint and TypeScript, the latter only to type-check the JSDoc
+annotations; nothing is compiled):
+
+```sh
+npm ci
+npm run check   # lint + typecheck + tests (also what CI runs)
+```
+
+Or individually: `npm run lint`, `npm run typecheck`, `npm test`.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

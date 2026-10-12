@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { runCli } from './run-cli.mjs';
 
 /**
  * Unlike the other readers in this project, this one is NOT a local file
@@ -34,7 +34,7 @@ export async function readAntigravityRateLimit() {
 /**
  * Maps the `agy -p /usage --output-format json` payload onto the shared
  * window shape.
- * @param {object} parsed
+ * @param {any} parsed
  * @param {Date} [now]
  */
 export function normalizeAgyUsage(parsed, now = new Date()) {
@@ -59,64 +59,4 @@ export function normalizeAgyUsage(parsed, now = new Date()) {
   }
 
   return { fetchedAt: now.toISOString(), windows };
-}
-
-function runCli(command, args) {
-  return new Promise((resolve, reject) => {
-    const windows = process.platform === 'win32';
-    // See claude-ratelimit.mjs: `detached: true` was tried here but is what
-    // was crashing the whole tmux/psmux session on a second `agent-usage`
-    // run. Leave it off; taskkill in terminateChildTree still reaps the tree.
-    const child = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: windows,
-      shell: false,
-    });
-    let stdout = '';
-    let stderr = '';
-    let done = false;
-    const finish = async (fn, value, terminate = false) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timeout);
-      if (terminate) await terminateChildTree(child);
-      fn(value);
-    };
-    const timeout = setTimeout(() => {
-      void finish(reject, new Error('timed out waiting for agy'), true);
-    }, 30_000);
-
-    child.on('error', (err) => { void finish(reject, err, true); });
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('close', (code) => {
-      if (code === 0) void finish(resolve, stdout);
-      else void finish(reject, new Error(stderr.trim() || `agy exited with code ${code}`));
-    });
-  });
-}
-
-function terminateChildTree(child) {
-  if (process.platform !== 'win32' || !child.pid || child.exitCode !== null) {
-    child.kill();
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    // This helper is short-lived and is deliberately not detached; only the
-    // queried CLI gets an isolated console process group.
-    const taskkill = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
-      stdio: 'ignore',
-      windowsHide: true,
-      shell: false,
-    });
-    taskkill.once('error', () => {
-      child.kill();
-      resolve();
-    });
-    taskkill.once('close', (code) => {
-      if (code !== 0) child.kill();
-      resolve();
-    });
-  });
 }

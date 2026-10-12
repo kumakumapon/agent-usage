@@ -6,7 +6,7 @@ import { readClaudeRateLimit } from './claude-ratelimit.mjs';
 import { readCodexRateLimit } from './codex-ratelimit.mjs';
 import { readAntigravityRateLimit } from './antigravity-ratelimit.mjs';
 import { loadPricing, estimateCost, PRICING_FILE } from './pricing.mjs';
-import { formatInt, formatCompact, formatCost, formatAge, formatUntil, renderTable, renderBarChart, renderGauge } from './format.mjs';
+import { formatCompact, formatCost, formatUntil, renderTable, renderBarChart, renderGauge } from './format.mjs';
 
 const HELP = `Usage: agent-usage [command] [options]
 
@@ -282,6 +282,7 @@ function printLimits(result) {
 
 async function watchLimits(tools, intervalSec) {
   let stopped = false;
+  /** @type {((value?: unknown) => void)|null} */
   let wake = null;
 
   // Stop by letting the loop below unwind on its own, instead of
@@ -398,11 +399,11 @@ export async function run(argv) {
   if (result.antigravity) {
     console.log('\nAntigravity CLI (agy) — activity, not tokens (see note)');
     const ag = result.antigravity;
-    if (ag.available) {
+    if (ag.available && ag.byDay) {
       const headers = ['Date', 'Sessions', 'Turns'];
       const body = ag.byDay.map((r) => [r.day, String(r.sessions), String(r.turns)]);
       console.log(renderTable(headers, body, [1, 2]));
-      console.log(`  all-time: ${ag.totalConversations} conversations, ${formatCompact(ag.totalSteps)} agent steps`);
+      console.log(`  all-time: ${ag.totalConversations} conversations, ${formatCompact(ag.totalSteps ?? 0)} agent steps`);
       if (args.chart && ag.byDay.length) {
         console.log();
         console.log(renderBarChart(ag.byDay.map((r) => ({ label: r.day, value: r.turns }))));

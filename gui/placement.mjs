@@ -1,6 +1,8 @@
 // Window-placement maths, kept free of Electron so it can be unit-tested.
 // Rects are { x, y, width, height } in screen coordinates.
 
+/** @typedef {{x: number, y: number, width: number, height: number}} Rect */
+
 /**
  * Moves a window of `size` so it lies fully inside `area`, changing it as
  * little as possible. A window larger than the area is pinned to the top-left.
@@ -30,8 +32,12 @@ export function cornerPosition(size, area, margin = 16) {
  * Picks the work area a window at `rect` should live on: the display it
  * overlaps most, or — when it overlaps none (its monitor was unplugged) —
  * the nearest one. `areas` is the list of displays' work areas.
+ * @param {Rect} rect
+ * @param {Rect[]} areas
+ * @returns {Rect|null}
  */
 export function pickArea(rect, areas) {
+  /** @type {{area: Rect, overlap: number, distance: number}|null} */
   let best = null;
   for (const area of areas) {
     const w = Math.min(rect.x + rect.width, area.x + area.width) - Math.max(rect.x, area.x);

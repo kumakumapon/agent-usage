@@ -45,7 +45,7 @@ function readHistoryEntries() {
 
 /**
  * @param {{since?: string, until?: string}} [range] inclusive YYYY-MM-DD bounds
- * @returns {{available: boolean, byDay?: Array<object>, totalSteps?: number,
+ * @returns {{available: boolean, byDay?: Array<{day: string, sessions: number, turns: number}>, totalSteps?: number,
  *   totalConversations?: number, note: string}}
  */
 export function collectAntigravityActivity(range = {}) {

@@ -33,8 +33,18 @@ function* walkJsonl(dir) {
  * assistant message that carries a usage block. Transcripts are append-only,
  * so only the part added since the last run is re-parsed (see
  * incremental.mjs); pass `{ cache: false }` to force a full re-read.
+ * @typedef {object} ClaudeUsageRecord
+ * @property {string} project
+ * @property {string|null} sessionId
+ * @property {string} model
+ * @property {string|null} timestamp
+ * @property {number} input
+ * @property {number} output
+ * @property {number} cacheWrite
+ * @property {number} cacheRead
+ *
  * @param {{cache?: boolean}} [opts]
- * @returns {Promise<Array<object>>}
+ * @returns {Promise<ClaudeUsageRecord[]>}
  */
 export async function collectClaudeUsage({ cache = true } = {}) {
   const files = [...walkJsonl(CLAUDE_PROJECTS_DIR)].map(({ project, filePath }) => ({ filePath, meta: { project } }));
