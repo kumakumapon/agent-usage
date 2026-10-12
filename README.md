@@ -12,7 +12,7 @@ explicit exception, noted below.
 ## Requirements
 
 - Node.js 22+ (uses the built-in `node:sqlite` and `node:util.parseArgs`)
-- Windows, macOS, or Linux
+- Windows, macOS, or Linux for the CLI (the [tray GUI](#windows-gui) is Windows-only)
 - For Antigravity rate limits: the `agy` CLI installed and logged in
 
 ## Install
@@ -101,6 +101,10 @@ Reads:
 A system-tray app (Electron) is available under [`gui/`](gui/) for Windows —
 shows live rate-limit gauges in a tray popup instead of a terminal, built on
 the same local readers as `limits`/`--watch`. See [`gui/README.md`](gui/README.md).
+
+The GUI is **Windows-only**: it is developed and tested on Windows 11 only,
+and macOS/Linux builds are neither provided nor tested. The CLI above is the
+cross-platform part.
 
 ## Privacy notes
 

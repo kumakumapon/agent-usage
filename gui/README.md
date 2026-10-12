@@ -7,6 +7,22 @@ the `agent-usage limits` command (`../src/claude-ratelimit.mjs`,
 leaves your machine; the tray app just polls the same local CLIs on an
 interval instead of you running `agent-usage --watch` by hand.
 
+## Platform support
+
+**Windows only.** This app is developed and tested on Windows 11. It may start
+on macOS or Linux (Electron itself is cross-platform), but that is untested and
+unsupported — nothing here is adapted to other platforms:
+
+- the tray/menu wording and the "Start with Windows" option assume Windows
+- the installer is built for Windows only (`electron-builder --win`)
+- window behaviour (frameless always-on-top widget, layouts, positioning) has
+  only been checked against Windows' taskbar and work-area rules
+
+For macOS or Linux, use the cross-platform CLI instead (`agent-usage limits
+--watch`, see the [main README](../README.md)). Adding another platform means
+a menu-bar/AppIndicator pass plus its own packaging target — contributions
+welcome.
+
 ## Run
 
 ```sh
