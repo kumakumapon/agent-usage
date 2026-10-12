@@ -12,6 +12,7 @@ export function formatCompact(n) {
   const v = Math.round(n);
   const abs = Math.abs(v);
   if (abs < 1000) return String(v);
+  /** @type {Array<[number, string]>} */
   const units = [
     [1_000_000_000, 'B'],
     [1_000_000, 'M'],

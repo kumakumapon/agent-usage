@@ -16,7 +16,7 @@ export async function readCodexRateLimit() {
 
 /**
  * Maps an `account/rateLimits/read` result onto the shared window shape.
- * @param {object} result
+ * @param {any} result
  * @param {Date} [now]
  */
 export function normalizeCodexRateLimits(result, now = new Date()) {
@@ -67,13 +67,13 @@ function requestRateLimits() {
       fn(value);
     };
     const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
-    child.on('error', (err) => { void finish(reject, new Error(err.code === 'ENOENT' ? 'codex not found on PATH' : err.message)); });
+    child.on('error', (/** @type {NodeJS.ErrnoException} */ err) => { void finish(reject, new Error(err.code === 'ENOENT' ? 'codex not found on PATH' : err.message)); });
     child.on('exit', (code) => { if (!done) void finish(reject, new Error(stderr.trim() || `codex app-server exited with code ${code}`)); });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.stdout.on('data', (chunk) => {
       buffered += chunk;
       const lines = buffered.split(/\r?\n/);
-      buffered = lines.pop();
+      buffered = lines.pop() ?? '';
       for (const line of lines) {
         try {
           const message = JSON.parse(line);

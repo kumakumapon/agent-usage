@@ -29,8 +29,18 @@ export function* walkJsonlRecursive(dir) {
  * Rollouts are append-only, so only the part added since the last run is
  * re-parsed (see incremental.mjs); pass `{ cache: false }` to force a full
  * re-read.
+ * @typedef {object} CodexUsageRecord
+ * @property {string|null} project
+ * @property {string|null} sessionId
+ * @property {string} model
+ * @property {string|null} timestamp
+ * @property {number} input
+ * @property {number} cachedInput
+ * @property {number} output
+ * @property {number} reasoningOutput
+ *
  * @param {{cache?: boolean}} [opts]
- * @returns {Promise<Array<object>>}
+ * @returns {Promise<CodexUsageRecord[]>}
  */
 export async function collectCodexUsage({ cache = true } = {}) {
   const files = [...walkJsonlRecursive(CODEX_SESSIONS_DIR)].map((filePath) => ({ filePath }));

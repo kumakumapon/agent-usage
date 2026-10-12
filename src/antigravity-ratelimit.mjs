@@ -34,7 +34,7 @@ export async function readAntigravityRateLimit() {
 /**
  * Maps the `agy -p /usage --output-format json` payload onto the shared
  * window shape.
- * @param {object} parsed
+ * @param {any} parsed
  * @param {Date} [now]
  */
 export function normalizeAgyUsage(parsed, now = new Date()) {

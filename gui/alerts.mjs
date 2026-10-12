@@ -27,7 +27,7 @@ export function createAlertTracker() {
   const announced = new Map();
 
   /**
-   * @param {Record<string, {windows?: Array<{window: string, percent: number|null, resetsAt?: string|null}>}>} result
+   * @param {Record<string, {stale?: boolean, windows?: Array<{window: string, percent: number|null, resetsAt?: string|null}>}>} result
    * @param {number[]} thresholds ascending
    * @returns {Array<{tool: string, window: string, percent: number, threshold: number, resetsAt: string|null}>}
    */
@@ -36,14 +36,15 @@ export function createAlertTracker() {
     for (const [tool, data] of Object.entries(result || {})) {
       if (data?.stale) continue; // an old reading can't have newly crossed anything
       for (const w of data?.windows || []) {
-        if (typeof w.percent !== 'number') continue;
+        const percent = w.percent;
+        if (typeof percent !== 'number') continue;
         const key = `${tool}|${w.window}`;
-        const level = Math.max(0, ...thresholds.filter((t) => w.percent >= t));
+        const level = Math.max(0, ...thresholds.filter((t) => percent >= t));
         const before = announced.get(key);
         announced.set(key, level);
         if (before === undefined) continue; // baseline
         if (level > before) {
-          alerts.push({ tool, window: w.window, percent: w.percent, threshold: level, resetsAt: w.resetsAt || null });
+          alerts.push({ tool, window: w.window, percent, threshold: level, resetsAt: w.resetsAt || null });
         }
       }
     }

@@ -13,7 +13,10 @@
   },
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "lint": "eslint .",
+    "typecheck": "tsc -p .",
+    "check": "npm run lint && npm run typecheck && npm test"
   },
   "bin": {
     "agent-usage": "./bin.mjs"
@@ -35,5 +38,12 @@
     "README.md",
     "LICENSE"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "typescript": "^7.0.2"
+  }
 }
