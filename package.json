@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "List local token usage and rate-limit status for Claude Code CLI, Codex CLI, and Antigravity from their local session logs.",
   "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
   "bin": {
     "agent-usage": "./bin.mjs"
   },

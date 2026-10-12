@@ -7,26 +7,34 @@ const TIMEOUT_MS = 30_000;
 /** Fetch current quota through Codex's read-only app-server protocol. */
 export async function readCodexRateLimit() {
   try {
-    const result = await requestRateLimits();
-    const limits = result.rateLimits;
-    if (!limits) return { error: 'unexpected rate-limit response from codex app-server' };
-    const windows = [];
-    if (limits.primary) windows.push({ window: 'primary', ...limits.primary });
-    if (limits.secondary) windows.push({ window: 'secondary', ...limits.secondary });
-    return {
-      fetchedAt: new Date().toISOString(),
-      planType: limits.planType || null,
-      windows: windows.map((w) => ({
-        window: w.window,
-        percent: w.usedPercent ?? null,
-        resetsAt: w.resetsAt ? new Date(w.resetsAt * 1000).toISOString() : null,
-        windowMinutes: w.windowDurationMins ?? null,
-      })),
-      credits: limits.credits || null,
-    };
+    return normalizeCodexRateLimits(await requestRateLimits());
   } catch (err) {
     return { error: err.message || String(err) };
   }
+}
+
+/**
+ * Maps an `account/rateLimits/read` result onto the shared window shape.
+ * @param {object} result
+ * @param {Date} [now]
+ */
+export function normalizeCodexRateLimits(result, now = new Date()) {
+  const limits = result?.rateLimits;
+  if (!limits) return { error: 'unexpected rate-limit response from codex app-server' };
+  const windows = [];
+  if (limits.primary) windows.push({ window: 'primary', ...limits.primary });
+  if (limits.secondary) windows.push({ window: 'secondary', ...limits.secondary });
+  return {
+    fetchedAt: now.toISOString(),
+    planType: limits.planType || null,
+    windows: windows.map((w) => ({
+      window: w.window,
+      percent: w.usedPercent ?? null,
+      resetsAt: w.resetsAt ? new Date(w.resetsAt * 1000).toISOString() : null,
+      windowMinutes: w.windowDurationMins ?? null,
+    })),
+    credits: limits.credits || null,
+  };
 }
 
 function requestRateLimits() {

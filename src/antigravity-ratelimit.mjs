@@ -28,7 +28,17 @@ export async function readAntigravityRateLimit() {
     return { error: 'could not parse agy output as JSON' };
   }
 
-  const groups = parsed.command?.data?.groups;
+  return normalizeAgyUsage(parsed);
+}
+
+/**
+ * Maps the `agy -p /usage --output-format json` payload onto the shared
+ * window shape.
+ * @param {object} parsed
+ * @param {Date} [now]
+ */
+export function normalizeAgyUsage(parsed, now = new Date()) {
+  const groups = parsed?.command?.data?.groups;
   if (!groups) return { error: 'unexpected /usage response shape from agy' };
 
   const shortGroupName = (name) =>
@@ -48,7 +58,7 @@ export async function readAntigravityRateLimit() {
     }
   }
 
-  return { fetchedAt: new Date().toISOString(), windows };
+  return { fetchedAt: now.toISOString(), windows };
 }
 
 function runCli(command, args) {
