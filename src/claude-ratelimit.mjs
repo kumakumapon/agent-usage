@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { runCli } from './run-cli.mjs';
 
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 
@@ -129,66 +129,4 @@ export async function readClaudeRateLimit() {
   if (windows.length === 0) return { error: 'could not find usage lines in /usage output' };
 
   return { fetchedAt: new Date().toISOString(), windows };
-}
-
-function runCli(command, args) {
-  return new Promise((resolve, reject) => {
-    const windows = process.platform === 'win32';
-    // `detached: true` (CREATE_NEW_PROCESS_GROUP on Windows) was tried here
-    // to isolate this child from the parent console group, but it's what
-    // was crashing the whole tmux/psmux session on a second `agent-usage`
-    // run - confirmed by bisection. Leave it off; taskkill in
-    // terminateChildTree still reaps the process tree.
-    const child = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: windows,
-      shell: false,
-    });
-    let stdout = '';
-    let stderr = '';
-    let done = false;
-    const finish = async (fn, value, terminate = false) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timeout);
-      if (terminate) await terminateChildTree(child);
-      fn(value);
-    };
-    const timeout = setTimeout(() => {
-      void finish(reject, new Error('timed out waiting for claude'), true);
-    }, 30_000);
-
-    child.on('error', (err) => { void finish(reject, err, true); });
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('close', (code) => {
-      if (code === 0) void finish(resolve, stdout);
-      else void finish(reject, new Error(stderr.trim() || `claude exited with code ${code}`));
-    });
-  });
-}
-
-function terminateChildTree(child) {
-  if (process.platform !== 'win32' || !child.pid || child.exitCode !== null) {
-    child.kill();
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    // This helper is short-lived and is deliberately not detached; only the
-    // queried CLI gets an isolated console process group.
-    const taskkill = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
-      stdio: 'ignore',
-      windowsHide: true,
-      shell: false,
-    });
-    taskkill.once('error', () => {
-      child.kill();
-      resolve();
-    });
-    taskkill.once('close', (code) => {
-      if (code !== 0) child.kill();
-      resolve();
-    });
-  });
 }

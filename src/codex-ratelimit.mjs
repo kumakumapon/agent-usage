@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
+import { terminateChildTree } from './run-cli.mjs';
 
 const TIMEOUT_MS = 30_000;
 
@@ -115,29 +116,4 @@ function findWindowsCodexExecutable() {
 
   // Let spawn produce the usual ENOENT error when Codex is not installed.
   return 'codex.exe';
-}
-
-function terminateChildTree(child) {
-  if (process.platform !== 'win32' || !child.pid || child.exitCode !== null) {
-    child.kill();
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    // This helper is short-lived and is deliberately not detached; only the
-    // queried CLI gets an isolated console process group.
-    const taskkill = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
-      stdio: 'ignore',
-      windowsHide: true,
-      shell: false,
-    });
-    taskkill.once('error', () => {
-      child.kill();
-      resolve();
-    });
-    taskkill.once('close', (code) => {
-      if (code !== 0) child.kill();
-      resolve();
-    });
-  });
 }
