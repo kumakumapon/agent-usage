@@ -1,10 +1,11 @@
-import { app, Tray, Menu, BrowserWindow, Notification, nativeImage, ipcMain, screen } from 'electron';
+import { app, Tray, Menu, BrowserWindow, Notification, nativeImage, nativeTheme, ipcMain, screen } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { clampToArea, cornerPosition, pickArea } from './placement.mjs';
 import { DEFAULT_THRESHOLDS, alertText, createAlertTracker, normalizeThresholds } from './alerts.mjs';
 import { renderTrayIcon } from './tray-icon.mjs';
+import { LANGUAGES, createTranslator, resolveLanguage, windowLabel } from './i18n.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -29,11 +30,20 @@ const enabledTools = { claude: true, codex: true, antigravity: false };
 // Window size per layout — all portrait (taller than wide) so the widget
 // takes less horizontal desktop space than the original 380x420 box.
 const LAYOUTS = {
-  normal: { label: 'Normal', size: [380, 420] },
-  compact: { label: 'Compact', size: [240, 480] },
-  mini: { label: 'Mini', size: [140, 560] },
+  normal: { size: [380, 420] },
+  compact: { size: [240, 480] },
+  mini: { size: [140, 560] },
 };
 let layoutMode = 'normal';
+
+// UI language ('auto' follows the system locale) and colour theme ('system'
+// follows the OS light/dark setting). `t` translates menu, tooltip and
+// notification text; the widget page gets the language over IPC.
+const THEMES = ['system', 'dark', 'light'];
+let languageSetting = 'auto';
+let themeSetting = 'system';
+let t = createTranslator('en');
+const currentLanguage = () => resolveLanguage(languageSetting, app.getLocale());
 // Desktop notification when a usage window passes one of these percentages.
 // Thresholds aren't in the tray menu; edit `notifications.thresholds` in
 // settings.json.
@@ -58,6 +68,8 @@ function loadSettings() {
     if (typeof raw.enabledTools?.[name] === 'boolean') enabledTools[name] = raw.enabledTools[name];
   }
   if (LAYOUTS[raw.layoutMode]) layoutMode = raw.layoutMode;
+  if (raw.language === 'auto' || LANGUAGES.includes(raw.language)) languageSetting = raw.language;
+  if (THEMES.includes(raw.theme)) themeSetting = raw.theme;
   if (typeof raw.notifications?.enabled === 'boolean') notifications.enabled = raw.notifications.enabled;
   notifications.thresholds = normalizeThresholds(raw.notifications?.thresholds) ?? notifications.thresholds;
   const pos = raw.position;
@@ -69,7 +81,11 @@ function writeSettings() {
   try {
     writeFileSync(
       settingsPath(),
-      JSON.stringify({ enabledTools, layoutMode, position: savedPosition, notifications }, null, 2),
+      JSON.stringify(
+        { enabledTools, layoutMode, position: savedPosition, notifications, language: languageSetting, theme: themeSetting },
+        null,
+        2,
+      ),
     );
   } catch (err) {
     console.error('could not save settings:', err.message);
@@ -82,7 +98,7 @@ function saveSettings() {
 }
 
 function toolLabel(name) {
-  return { claude: 'Claude Code', codex: 'Codex CLI', antigravity: 'Antigravity' }[name];
+  return t(`tool.${name}`);
 }
 
 // Each tool is fetched independently so a slow one (agy takes 5-10s to
@@ -143,7 +159,7 @@ function checkAlerts() {
   const alerts = alertTracker.evaluate(lastResult, notifications.thresholds);
   if (!notifications.enabled || !Notification.isSupported()) return;
   for (const alert of alerts) {
-    const { title, body } = alertText(alert, toolLabel(alert.tool));
+    const { title, body } = alertText(alert, toolLabel(alert.tool), t);
     const toast = new Notification({ title, body });
     toast.on('click', () => showWindow());
     toast.on('failed', (_event, error) => console.error('usage alert not shown:', error));
@@ -204,7 +220,7 @@ function summarize(result) {
 
 function tooltipFor(result) {
   const worst = summarize(result);
-  if (!worst) return 'agent-usage — no data yet';
+  if (!worst) return t('tray.noData');
   const lines = [];
   for (const [tool, data] of Object.entries(result)) {
     if (data?.error && !data.stale) {
@@ -212,7 +228,7 @@ function tooltipFor(result) {
       continue;
     }
     for (const w of data?.windows || []) {
-      lines.push(`${toolLabel(tool)} ${w.window}: ${w.percent ?? '?'}%${data.stale ? ' (stale)' : ''}`);
+      lines.push(`${toolLabel(tool)} ${windowLabel(t, w.window)}: ${w.percent ?? '?'}%${data.stale ? ` ${t('tray.stale')}` : ''}`);
     }
   }
   return lines.join('\n') || 'agent-usage';
@@ -270,7 +286,10 @@ function createWindow() {
   // as a persistent always-on-top HUD instead of a tray popup that
   // disappears the moment it loses focus.
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.webContents.on('did-finish-load', () => win.webContents.send('layout:update', layoutMode));
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.send('layout:update', layoutMode);
+    win.webContents.send('lang:update', currentLanguage());
+  });
   // 'moved' fires once a drag ends (not on every pixel).
   win.on('moved', () => {
     const [x, y] = win.getPosition();
@@ -351,17 +370,17 @@ function toggleWindow() {
 function buildContextMenu() {
   return Menu.buildFromTemplate([
     {
-      label: 'Show window',
+      label: t('menu.show'),
       type: 'checkbox',
       checked: win?.isVisible() ?? false,
       click: () => toggleWindow(),
     },
-    { label: 'Refresh now', click: () => void poll() },
+    { label: t('menu.refresh'), click: () => void poll() },
     { type: 'separator' },
     {
-      label: 'Layout',
-      submenu: Object.entries(LAYOUTS).map(([mode, { label }]) => ({
-        label,
+      label: t('menu.layout'),
+      submenu: Object.keys(LAYOUTS).map((mode) => ({
+        label: t(`layout.${mode}`),
         type: 'radio',
         checked: layoutMode === mode,
         click: () => setLayout(mode),
@@ -369,26 +388,26 @@ function buildContextMenu() {
     },
     { type: 'separator' },
     {
-      label: 'Claude Code',
+      label: t('tool.claude'),
       type: 'checkbox',
       checked: enabledTools.claude,
       click: (item) => setToolEnabled('claude', item.checked),
     },
     {
-      label: 'Codex CLI',
+      label: t('tool.codex'),
       type: 'checkbox',
       checked: enabledTools.codex,
       click: (item) => setToolEnabled('codex', item.checked),
     },
     {
-      label: 'Antigravity (requires agy CLI login)',
+      label: t('tool.antigravityMenu'),
       type: 'checkbox',
       checked: enabledTools.antigravity,
       click: (item) => setToolEnabled('antigravity', item.checked),
     },
     { type: 'separator' },
     {
-      label: `Usage alerts (${notifications.thresholds.join('% / ')}%)`,
+      label: t('menu.alerts', { thresholds: `${notifications.thresholds.join('% / ')}%` }),
       type: 'checkbox',
       checked: notifications.enabled,
       click: (item) => {
@@ -397,13 +416,31 @@ function buildContextMenu() {
       },
     },
     {
-      label: 'Start with Windows',
+      label: t('menu.language'),
+      submenu: ['auto', ...LANGUAGES].map((lang) => ({
+        label: t(`lang.${lang}`),
+        type: 'radio',
+        checked: languageSetting === lang,
+        click: () => setLanguage(lang),
+      })),
+    },
+    {
+      label: t('menu.theme'),
+      submenu: THEMES.map((theme) => ({
+        label: t(`theme.${theme}`),
+        type: 'radio',
+        checked: themeSetting === theme,
+        click: () => setTheme(theme),
+      })),
+    },
+    {
+      label: t('menu.startup'),
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
     },
     { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
+    { label: t('menu.quit'), click: () => app.quit() },
   ]);
 }
 
@@ -411,10 +448,32 @@ function syncTrayMenu() {
   if (tray) tray.setContextMenu(buildContextMenu());
 }
 
+function applyLanguage() {
+  t = createTranslator(currentLanguage());
+}
+
+function setLanguage(lang) {
+  languageSetting = lang;
+  applyLanguage();
+  saveSettings();
+  syncTrayMenu();
+  if (tray) tray.setToolTip(tooltipFor(lastResult ?? {}));
+  if (win) win.webContents.send('lang:update', currentLanguage());
+}
+
+// nativeTheme drives the page's prefers-color-scheme, so the widget's CSS
+// follows it with no extra IPC.
+function setTheme(theme) {
+  themeSetting = theme;
+  nativeTheme.themeSource = theme;
+  saveSettings();
+  syncTrayMenu();
+}
+
 function createTray() {
   const { width, height, buffer } = renderTrayIcon(null);
   tray = new Tray(nativeImage.createFromBitmap(buffer, { width, height, scaleFactor: 2 }));
-  tray.setToolTip('agent-usage — loading…');
+  tray.setToolTip(t('tray.loading'));
   syncTrayMenu();
   tray.on('click', () => toggleWindow());
 }
@@ -435,6 +494,8 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     app.setAppUserModelId('dev.agent-usage.gui');
     loadSettings();
+    applyLanguage();
+    nativeTheme.themeSource = themeSetting;
     for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
       screen.on(event, onDisplaysChanged);
     }

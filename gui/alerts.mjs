@@ -2,6 +2,8 @@
 // Electron-free so it can be unit-tested; main.mjs turns the results into
 // desktop notifications.
 
+import { formatResets, windowLabel } from './i18n.mjs';
+
 export const DEFAULT_THRESHOLDS = [80, 95];
 
 /**
@@ -54,23 +56,17 @@ export function createAlertTracker() {
   return { evaluate };
 }
 
-export function formatReset(iso, now = Date.now()) {
-  if (!iso) return '';
-  const ms = new Date(iso).getTime() - now;
-  if (!Number.isFinite(ms)) return '';
-  if (ms <= 0) return 'resets soon';
-  const mins = Math.round(ms / 60000);
-  if (mins < 60) return `resets in ${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 48) return `resets in ${hours}h`;
-  return `resets in ${Math.round(hours / 24)}d`;
-}
-
-/** Notification title/body for an alert from `evaluate`. */
-export function alertText(alert, toolLabel, now = Date.now()) {
-  const reset = formatReset(alert.resetsAt, now);
+/**
+ * Notification title/body for an alert from `evaluate`.
+ * @param {{window: string, percent: number, threshold: number, resetsAt: string|null}} alert
+ * @param {string} toolLabel
+ * @param {(key: string, params?: Record<string, string|number>) => string} t translator (see i18n.mjs)
+ * @param {number} [now]
+ */
+export function alertText(alert, toolLabel, t, now = Date.now()) {
+  const reset = formatResets(t, alert.resetsAt, now);
   return {
-    title: `${toolLabel}: ${alert.window} at ${alert.percent}%`,
-    body: [`Passed ${alert.threshold}% of the limit.`, reset].filter(Boolean).join(' '),
+    title: t('alert.title', { tool: toolLabel, window: windowLabel(t, alert.window), percent: alert.percent }),
+    body: [t('alert.body', { threshold: alert.threshold }), reset].filter(Boolean).join(' '),
   };
 }

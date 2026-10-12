@@ -78,6 +78,25 @@ Claude Code and Codex are enabled by default (matching the CLI's default);
 Antigravity is opt-in from the tray menu since it needs the `agy` CLI logged
 in.
 
+## Language, theme and accessibility
+
+- **Language** — English or Japanese (日本語), from the tray menu → **Language**.
+  *Auto* follows the system locale. It covers the widget, tray menu, tooltip
+  and notifications; window names the CLIs report (e.g. `session (5h)`,
+  `weekly`) are translated too, anything else is shown as reported.
+- **Theme** — System, Dark or Light, from the tray menu → **Theme**. *System*
+  follows the OS light/dark setting.
+- **Contrast** — text meets WCAG AA (4.5:1) and the bar colours meet 3:1 in
+  both themes; `test/gui-contrast.test.mjs` checks this against the palette in
+  `index.html`.
+- **Screen readers & keyboard** — each bar is a labelled progress bar
+  ("Claude Code session (5h): 8%"), the buttons have labels and visible focus
+  rings, **Esc** hides the widget and **F5** / **Ctrl+R** refreshes. Stale data
+  is marked with text, not only colour.
+
+Language and theme are saved in `settings.json` (`language`: `auto` | `en` |
+`ja`; `theme`: `system` | `dark` | `light`).
+
 ## Build a Windows installer
 
 ```sh

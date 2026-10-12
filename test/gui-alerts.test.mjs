@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alertText, createAlertTracker, formatReset, normalizeThresholds } from '../gui/alerts.mjs';
+import { alertText, createAlertTracker, normalizeThresholds } from '../gui/alerts.mjs';
+import { createTranslator } from '../gui/i18n.mjs';
 
 const T = [80, 95];
 const res = (percent, extra = {}) => ({ claude: { windows: [{ window: 'weekly', percent, resetsAt: null }], ...extra } });
@@ -62,17 +63,16 @@ test('normalizeThresholds keeps valid numbers, sorted and unique', () => {
   assert.equal(normalizeThresholds([0, 'a']), null);
 });
 
-test('alertText and formatReset', () => {
+test('alertText is localised', () => {
   const now = Date.parse('2026-08-20T00:00:00Z');
-  assert.equal(formatReset('2026-08-20T02:00:00Z', now), 'resets in 2h');
-  assert.equal(formatReset('2026-08-20T00:30:00Z', now), 'resets in 30m');
-  assert.equal(formatReset('2026-08-27T00:00:00Z', now), 'resets in 7d');
-  assert.equal(formatReset('2026-08-19T00:00:00Z', now), 'resets soon');
-  assert.equal(formatReset(null, now), '');
-  const text = alertText(
-    { window: 'session (5h)', percent: 82, threshold: 80, resetsAt: '2026-08-20T02:00:00Z' },
-    'Claude Code',
-    now,
-  );
-  assert.deepEqual(text, { title: 'Claude Code: session (5h) at 82%', body: 'Passed 80% of the limit. resets in 2h' });
+  const alert = { window: 'session (5h)', percent: 82, threshold: 80, resetsAt: '2026-08-20T02:00:00Z' };
+  assert.deepEqual(alertText(alert, 'Claude Code', createTranslator('en'), now), {
+    title: 'Claude Code: session (5h) at 82%',
+    body: 'Passed 80% of the limit. resets in 2h',
+  });
+  assert.deepEqual(alertText(alert, 'Claude Code', createTranslator('ja'), now), {
+    title: 'Claude Code: セッション (5時間) が 82%',
+    body: '上限の 80% を超えました。 2時間後にリセット',
+  });
+  assert.equal(alertText({ ...alert, resetsAt: null }, 'Codex CLI', createTranslator('en'), now).body, 'Passed 80% of the limit.');
 });

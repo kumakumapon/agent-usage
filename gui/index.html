@@ -4,15 +4,50 @@
 <meta charset="utf-8" />
 <title>Agent Usage</title>
 <style>
-  :root { color-scheme: dark; }
+  /* Palette. The theme follows prefers-color-scheme, which the app drives via
+     nativeTheme (tray menu → Theme). Text colours meet WCAG AA (4.5:1) on
+     --bg and bar colours meet 3:1 on --track — enforced by
+     test/gui-contrast.test.mjs, which reads these two blocks. */
+  :root {
+    color-scheme: dark light;
+    --bg: #1e222a;
+    --border: #3a3f4b;
+    --fg: #e6e9ef;
+    --fg-strong: #c7cbd6;
+    --muted: #9aa1b2;
+    --track: #2b303b;
+    --ok: #4caf50;
+    --warn: #f5a623;
+    --crit: #e5484d;
+    --error: #ff7b7f;
+    --warn-text: #f5a623;
+    --focus: #8ab4ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f7f9;
+      --border: #cfd3dc;
+      --fg: #1b1e25;
+      --fg-strong: #2a2f3a;
+      --muted: #555b6a;
+      --track: #d9dde5;
+      --ok: #2e7d32;
+      --warn: #b26a00;
+      --crit: #c62828;
+      --error: #b3261e;
+      --warn-text: #8a5300;
+      --focus: #1a56c4;
+    }
+  }
+
   * { box-sizing: border-box; }
   body {
     margin: 0;
     font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
     font-size: 13px;
-    background: #1e222a;
-    color: #e6e9ef;
-    border: 1px solid #3a3f4b;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
   }
@@ -24,35 +59,40 @@
     -webkit-app-region: drag;
   }
   header h1 { font-size: 13px; font-weight: 600; margin: 0; }
-  header .meta { font-size: 11px; color: #8a90a0; }
-  header .actions { -webkit-app-region: no-drag; display: flex; gap: 6px; align-items: center; }
+  header .meta { font-size: 11px; color: var(--muted); }
+  header .actions { -webkit-app-region: no-drag; display: flex; gap: 4px; align-items: center; }
   #refresh, #hide {
-    background: none; border: none; color: #8a90a0; cursor: pointer; font-size: 13px; padding: 2px 4px;
+    background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px;
+    /* WCAG 2.2 target size: at least 24x24 CSS px. */
+    min-width: 24px; min-height: 24px; padding: 2px 4px; border-radius: 4px;
   }
-  #refresh:hover, #hide:hover { color: #e6e9ef; }
+  #refresh:hover, #hide:hover { color: var(--fg); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   main { padding: 4px 12px 12px; max-height: 380px; overflow-y: auto; }
   section { margin-bottom: 14px; }
   section h2 {
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
-    color: #8a90a0; margin: 0 0 6px;
+    color: var(--muted); margin: 0 0 6px;
   }
   .row { margin-bottom: 8px; }
   .row-label {
     display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px;
   }
-  .row-label .pct { font-variant-numeric: tabular-nums; color: #c7cbd6; }
-  .row-label .resets { color: #6b7180; font-size: 11px; }
-  .bar { height: 6px; border-radius: 3px; background: #2b303b; overflow: hidden; }
+  .row-label .pct { font-variant-numeric: tabular-nums; color: var(--fg-strong); }
+  .row-label .resets { color: var(--muted); font-size: 11px; }
+  .bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
   .bar > span { display: block; height: 100%; border-radius: 3px; }
-  .lvl-ok > span { background: #4caf50; }
-  .lvl-warn > span { background: #f5a623; }
-  .lvl-crit > span { background: #e5484d; }
-  .error { color: #e5484d; font-size: 12px; }
-  /* Last good reading kept on screen after a failed refresh. */
-  section.stale .row { opacity: 0.55; }
-  .badge { color: #f5a623; text-transform: none; letter-spacing: 0; margin-left: 4px; }
-  .stale-note { color: #f5a623; font-size: 11px; margin: 0; word-break: break-word; }
-  .empty { color: #6b7180; font-size: 12px; }
+  .lvl-ok > span { background: var(--ok); }
+  .lvl-warn > span { background: var(--warn); }
+  .lvl-crit > span { background: var(--crit); }
+  .error { color: var(--error); font-size: 12px; }
+  .empty { color: var(--muted); font-size: 12px; }
+  /* Last good reading kept on screen after a failed refresh. Flagged by the
+     badge and note text; the edge is an extra cue. Not dimmed, so text and
+     bars keep their contrast. */
+  section.stale { border-left: 3px solid var(--warn-text); padding-left: 8px; }
+  .badge { color: var(--warn-text); text-transform: none; letter-spacing: 0; margin-left: 4px; }
+  .stale-note { color: var(--warn-text); font-size: 11px; margin: 0; word-break: break-word; }
 
   /* Compact: narrower, taller window — same layout, tighter spacing. */
   body[data-layout="compact"] header { padding: 8px 10px 4px; }
@@ -83,11 +123,11 @@
     <h1>agent-usage</h1>
     <div class="actions">
       <span class="meta" id="updated"></span>
-      <button id="refresh" title="Refresh now">&#8635;</button>
-      <button id="hide" title="Hide (reopen from the tray icon)">&#10005;</button>
+      <button id="refresh" type="button" title="Refresh now" aria-label="Refresh now">&#8635;</button>
+      <button id="hide" type="button" title="Hide (reopen from the tray icon)" aria-label="Hide (reopen from the tray icon)">&#10005;</button>
     </div>
   </header>
-  <main id="content">
+  <main id="content" aria-label="Rate-limit usage">
     <p class="empty">Loading…</p>
   </main>
   <script type="module" src="renderer.mjs"></script>
