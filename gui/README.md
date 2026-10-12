@@ -51,7 +51,8 @@ tool, plus a tray icon that:
   not hide itself when it loses focus)
 - refreshes in the background (Codex every 30s, Claude every 2min, Antigravity every 5min; 4× slower while the widget is hidden)
 - right-click for: show/hide the widget, refresh now, toggle
-  Claude/Codex/Antigravity, "Start with Windows", and Quit
+  Claude/Codex/Antigravity, usage alerts, language, theme, updates,
+  "Start with Windows", and Quit
 
 The widget's own ✕ button hides it (same as clicking the tray icon); use the
 tray icon or its right-click menu to bring it back.
@@ -109,8 +110,35 @@ Produces, under `gui/dist/` via `electron-builder`:
 - `agent-usage-gui-<version>-x64.exe` — portable exe (no install)
 
 The builds are **not code-signed**, so Windows SmartScreen shows an "unknown
-publisher" warning on first run (More info → Run anyway). There is also no
-auto-update yet: to upgrade, install or run the newer release.
+publisher" warning on first run (More info → Run anyway). See
+[Updates](#updates) for how the installed app upgrades itself.
+
+## Updates
+
+The **installed** app (the NSIS installer) can update itself from this
+repository's GitHub Releases. It is deliberately conservative:
+
+- **Nothing is contacted by default.** The app makes no network requests
+  until you choose tray menu → **Check for updates**, or switch on **Check for
+  updates automatically** (off by default; then once a day, starting a minute
+  after launch).
+- **Nothing is downloaded or installed without a click.** When a newer release
+  is found the menu offers **Download update vX.Y.Z**; after the download it
+  offers **Restart to install vX.Y.Z**. (A downloaded update is also applied if
+  you simply quit.) An automatic check that finds one shows a notification.
+- The download is checked against the SHA-512 in the release's `latest.yml`.
+  Because the builds are **not code-signed**, Windows does not verify who
+  published the installer — the trust anchor is this repository's Releases
+  page. Prefer to update by hand? Leave automatic checks off and download from
+  [Releases](https://github.com/kumakumapon/agent-usage/releases).
+- The **portable** exe can't replace itself, so its menu item opens the
+  Releases page instead. A development run (`npm start`) has no update feed
+  and shows the item greyed out.
+
+The update feed (`latest.yml` plus the `.blockmap`) is built by
+`electron-builder` and attached to each release by the release workflow, so a
+release is only updatable if it was published that way. `settings.json` holds
+the choice as `updates.autoCheck`.
 
 ## Releasing
 
@@ -120,8 +148,9 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
    match the tag) and merge to `main`.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. The workflow runs the tests, builds the installer and portable exe on
-   Windows, and attaches them to the tag's GitHub Release (creating it with
-   generated notes if it doesn't exist yet).
+   Windows, and attaches them — plus `latest.yml` and the `.blockmap`, which
+   installed apps read to find the update — to the tag's GitHub Release
+   (creating it with generated notes if it doesn't exist yet).
 
 To sign the builds, add a code-signing certificate as the repository secrets
 `CSC_LINK` (the .pfx, as a file path/URL or base64) and `CSC_KEY_PASSWORD`;

@@ -1,7 +1,8 @@
 name: release
 
 # Pushing a tag like v0.2.0 builds the Windows tray app and attaches the
-# installer + portable exe to that tag's GitHub Release (created if missing).
+# installer, portable exe and update feed (latest.yml) to that tag's GitHub
+# Release (created if missing).
 on:
   push:
     tags: ['v*']
@@ -47,12 +48,15 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
+      # latest.yml and the .blockmap are what the installed app reads to find
+      # and verify an update (electron-updater), so they ship with the exes.
       - name: Attach to the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          assets=(gui/dist/agent-usage-gui-*.exe gui/dist/agent-usage-gui-*.blockmap gui/dist/latest.yml)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" gui/dist/agent-usage-gui-*.exe --clobber
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" gui/dist/agent-usage-gui-*.exe --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --title "$GITHUB_REF_NAME" --generate-notes
           fi

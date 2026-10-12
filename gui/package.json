@@ -52,6 +52,16 @@
     },
     "nsis": {
       "artifactName": "agent-usage-gui-setup-${version}-${arch}.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kumakumapon",
+        "repo": "agent-usage"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }
