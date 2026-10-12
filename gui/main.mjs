@@ -1,6 +1,7 @@
 import { app, Tray, Menu, BrowserWindow, nativeImage, ipcMain, screen } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +31,45 @@ const LAYOUTS = {
   mini: { label: 'Mini', size: [140, 560] },
 };
 let layoutMode = 'normal';
+// Last position the user dragged the widget to; null means "use the default
+// bottom-right corner".
+let savedPosition = null;
+
+// Persisted across restarts: which tools are enabled, the layout, and where
+// the widget was last placed.
+const settingsPath = () => join(app.getPath('userData'), 'settings.json');
+
+function loadSettings() {
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(settingsPath(), 'utf8'));
+  } catch {
+    return; // missing or corrupt: keep defaults
+  }
+  for (const name of Object.keys(enabledTools)) {
+    if (typeof raw.enabledTools?.[name] === 'boolean') enabledTools[name] = raw.enabledTools[name];
+  }
+  if (LAYOUTS[raw.layoutMode]) layoutMode = raw.layoutMode;
+  const pos = raw.position;
+  if (Number.isFinite(pos?.x) && Number.isFinite(pos?.y)) savedPosition = { x: pos.x, y: pos.y };
+}
+
+let saveTimer = null;
+function writeSettings() {
+  try {
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({ enabledTools, layoutMode, position: savedPosition }, null, 2),
+    );
+  } catch (err) {
+    console.error('could not save settings:', err.message);
+  }
+}
+
+function saveSettings() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(writeSettings, 300);
+}
 
 function toolLabel(name) {
   return { claude: 'Claude Code', codex: 'Codex CLI', antigravity: 'Antigravity' }[name];
@@ -143,14 +183,15 @@ function schedulePoll() {
 
 function setToolEnabled(name, enabled) {
   enabledTools[name] = enabled;
+  saveSettings();
   if (enabled && !toolState[name].data) void fetchTool(name);
   else publish();
 }
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 380,
-    height: 420,
+    width: LAYOUTS[layoutMode].size[0],
+    height: LAYOUTS[layoutMode].size[1],
     show: false,
     frame: false,
     resizable: false,
@@ -169,11 +210,17 @@ function createWindow() {
   // disappears the moment it loses focus.
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.webContents.on('did-finish-load', () => win.webContents.send('layout:update', layoutMode));
+  // 'moved' fires once a drag ends (not on every pixel).
+  win.on('moved', () => {
+    const [x, y] = win.getPosition();
+    savedPosition = { x, y };
+    saveSettings();
+  });
 }
 
 function clampToWorkArea() {
   if (!win) return;
-  const { workArea } = screen.getPrimaryDisplay();
+  const { workArea } = screen.getDisplayMatching(win.getBounds());
   const [winW, winH] = win.getSize();
   const [x, y] = win.getPosition();
   const clampedX = Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - winW);
@@ -194,6 +241,7 @@ function setLayout(mode) {
   clampToWorkArea();
   win.webContents.send('layout:update', layoutMode);
   syncTrayMenu();
+  saveSettings();
 }
 
 function defaultWindowPosition() {
@@ -209,8 +257,9 @@ function defaultWindowPosition() {
 function showWindow() {
   if (!win) return;
   if (!win.isVisible()) {
-    const { x, y } = defaultWindowPosition();
+    const { x, y } = savedPosition ?? defaultWindowPosition();
     win.setPosition(x, y, false);
+    clampToWorkArea();
   }
   win.show();
   syncTrayMenu();
@@ -310,12 +359,21 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     app.setAppUserModelId('dev.agent-usage.gui');
+    loadSettings();
     createWindow();
     createTray();
     schedulePoll();
     showWindow();
   });
 }
+
+// Flush a debounced save that hasn't fired yet.
+app.on('before-quit', () => {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    writeSettings();
+  }
+});
 
 app.on('window-all-closed', (event) => {
   // A tray app has no "closing all windows" quit semantics — the tray icon
