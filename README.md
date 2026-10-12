@@ -59,6 +59,10 @@ Cost estimates are opt-in: fill in per-model USD/1M-token rates in
 `agent-usage --pricing` to print its path). Models with no configured rate
 show a `—` in the Cost column instead of a guessed number.
 
+Parsed results are cached per session file in `~/.agent-usage/cache/`, so repeat
+runs only read what was appended since the last one (a warm run is several times
+faster). Pass `--no-cache` to re-read everything; the cache is safe to delete.
+
 ### `limits` — current rate-limit / quota utilization
 
 ```sh
@@ -109,6 +113,9 @@ the same local readers as `limits`/`--watch`. See [`gui/README.md`](gui/README.m
   them — project directories, working-directory paths, and conversation text
   are read where present (needed to group by session) but are **never**
   included in any table, chart, or `--json` output.
+- The usage cache in `~/.agent-usage/cache/` holds the same extracted fields
+  (token counts, model, timestamp, session id, project path) as local JSON —
+  never prompt or conversation text.
 - The editable pricing file lives at `~/.agent-usage/pricing.json`, outside
   this repository, so your configured rates never end up in version control.
 
