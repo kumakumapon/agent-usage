@@ -24,6 +24,11 @@ function formatUntil(iso) {
   return `resets in ${Math.round(hours / 24)}d`;
 }
 
+function formatClock(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '?' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 function render(result) {
   if (!result || Object.keys(result).length === 0) {
     content.innerHTML = '<p class="empty">No tools enabled — right-click the tray icon to pick one.</p>';
@@ -32,7 +37,7 @@ function render(result) {
 
   const sections = Object.entries(result).map(([tool, data]) => {
     const label = TOOL_LABEL[tool] || tool;
-    if (data?.error) {
+    if (data?.error && !data.stale) {
       return `<section><h2>${label}</h2><p class="error">${escapeHtml(data.error)}</p></section>`;
     }
     if (!data?.windows?.length) {
@@ -52,7 +57,14 @@ function render(result) {
           </div>`;
       })
       .join('');
-    return `<section><h2>${label}</h2>${rows}</section>`;
+    if (!data.stale) return `<section><h2>${label}</h2>${rows}</section>`;
+    const since = formatClock(data.lastOkAt);
+    const detail = `Update failed: ${data.error} (last OK ${since})`;
+    return `<section class="stale">
+      <h2>${label} <span class="badge" title="${escapeHtml(detail)}">&#9888; stale</span></h2>
+      ${rows}
+      <p class="stale-note">${escapeHtml(detail)}</p>
+    </section>`;
   });
 
   content.innerHTML = sections.join('');
