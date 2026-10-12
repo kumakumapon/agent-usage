@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld('agentUsage', {
     ipcRenderer.on('limits:update', listener);
     return () => ipcRenderer.removeListener('limits:update', listener);
   },
+  onLanguage: (callback) => {
+    const listener = (_event, lang) => callback(lang);
+    ipcRenderer.on('lang:update', listener);
+    return () => ipcRenderer.removeListener('lang:update', listener);
+  },
   onLayout: (callback) => {
     const listener = (_event, mode) => callback(mode);
     ipcRenderer.on('layout:update', listener);
