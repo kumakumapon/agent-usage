@@ -1,4 +1,3 @@
-import { parseArgs } from 'node:util';
 import { collectClaudeUsage } from './claude-usage.mjs';
 import { collectCodexUsage } from './codex-usage.mjs';
 import { collectAntigravityActivity } from './antigravity-usage.mjs';
@@ -6,6 +5,7 @@ import { readClaudeRateLimit } from './claude-ratelimit.mjs';
 import { readCodexRateLimit } from './codex-ratelimit.mjs';
 import { readAntigravityRateLimit } from './antigravity-ratelimit.mjs';
 import { loadPricing, estimateCost, PRICING_FILE } from './pricing.mjs';
+import { parseCliArgs } from './args.mjs';
 import { formatCompact, formatCost, formatUntil, renderTable, renderBarChart, renderGauge } from './format.mjs';
 
 const HELP = `Usage: agent-usage [command] [options]
@@ -37,43 +37,9 @@ Options:
 Cost estimates use rates you supply in:
   ${PRICING_FILE}
 Models without a configured rate show token counts with no cost column.
+
+Exit codes: 0 success, 1 runtime error, 2 invalid command line (nothing is run).
 `;
-
-function parseCliArgs(argv) {
-  // util.parseArgs has no built-in --no-x negation for booleans, so handle
-  // --no-limits manually before parsing.
-  const noLimits = argv.includes('--no-limits');
-  const noCache = argv.includes('--no-cache');
-  const filtered = argv.filter((a) => a !== '--no-limits' && a !== '--no-cache');
-
-  const { values, positionals } = parseArgs({
-    args: filtered,
-    allowPositionals: true,
-    options: {
-      tool: { type: 'string' },
-      by: { type: 'string', default: 'model' },
-      since: { type: 'string' },
-      until: { type: 'string' },
-      chart: { type: 'boolean', default: false },
-      watch: { type: 'boolean', default: false },
-      interval: { type: 'string' },
-      json: { type: 'boolean', default: false },
-      pricing: { type: 'boolean', default: false },
-      help: { type: 'boolean', short: 'h', default: false },
-    },
-  });
-  const command = positionals[0] === 'usage' ? 'usage' : 'limits';
-  return { ...values, command, limits: !noLimits, cache: !noCache };
-}
-
-// antigravity is opt-in: it must be named explicitly (or via --tool all),
-// since it reports activity counts rather than the token/limit data claude
-// and codex give.
-function resolveTools(toolArg) {
-  if (!toolArg) return ['claude', 'codex'];
-  if (toolArg === 'all') return ['claude', 'codex', 'antigravity'];
-  return toolArg.split(',');
-}
 
 function inDateRange(timestamp, since, until) {
   if (!timestamp) return true;
@@ -237,11 +203,27 @@ function limitsTable(windows) {
   return renderTable(headers, body, []);
 }
 
-async function gatherLimits(tools) {
+/**
+ * Everything run() reaches out to — the session-log readers, the live
+ * rate-limit queries and the pricing file — so tests can swap in stubs.
+ * @typedef {typeof defaultDeps} Deps
+ */
+const defaultDeps = {
+  collectClaudeUsage,
+  collectCodexUsage,
+  collectAntigravityActivity,
+  readClaudeRateLimit,
+  readCodexRateLimit,
+  readAntigravityRateLimit,
+  loadPricing,
+};
+
+/** @param {string[]} tools @param {Deps} deps */
+async function gatherLimits(tools, deps) {
   const result = {};
-  if (tools.includes('claude')) result.claude = await readClaudeRateLimit();
-  if (tools.includes('codex')) result.codex = await readCodexRateLimit();
-  if (tools.includes('antigravity')) result.antigravity = await readAntigravityRateLimit();
+  if (tools.includes('claude')) result.claude = await deps.readClaudeRateLimit();
+  if (tools.includes('codex')) result.codex = await deps.readCodexRateLimit();
+  if (tools.includes('antigravity')) result.antigravity = await deps.readAntigravityRateLimit();
   return result;
 }
 
@@ -280,7 +262,7 @@ function printLimits(result) {
   }
 }
 
-async function watchLimits(tools, intervalSec) {
+async function watchLimits(tools, intervalSec, deps) {
   let stopped = false;
   /** @type {((value?: unknown) => void)|null} */
   let wake = null;
@@ -297,7 +279,7 @@ async function watchLimits(tools, intervalSec) {
   });
 
   while (!stopped) {
-    const result = await gatherLimits(tools);
+    const result = await gatherLimits(tools, deps);
     if (stopped) break;
     console.clear();
     console.log(`agent-usage limits — watching (refresh every ${intervalSec}s, Ctrl+C to stop)`);
@@ -312,8 +294,8 @@ async function watchLimits(tools, intervalSec) {
   }
 }
 
-async function runLimits(args) {
-  const tools = resolveTools(args.tool);
+async function runLimits(args, deps) {
+  const { tools } = args;
 
   if (args.watch) {
     if (args.json) {
@@ -322,11 +304,11 @@ async function runLimits(args) {
       return;
     }
     const intervalSec = Math.max(10, Number(args.interval) || 30);
-    await watchLimits(tools, intervalSec);
+    await watchLimits(tools, intervalSec, deps);
     return;
   }
 
-  const result = await gatherLimits(tools);
+  const result = await gatherLimits(tools, deps);
 
   if (args.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -337,43 +319,50 @@ async function runLimits(args) {
   console.log('');
 }
 
-export async function run(argv) {
+/**
+ * @param {string[]} argv
+ * @param {Partial<Deps>} [overrides] stubs for tests
+ */
+export async function run(argv, overrides = {}) {
+  // Validate before anything else: a bad command line must not start a
+  // provider, read the session logs or create the pricing file.
   const args = parseCliArgs(argv);
+  const deps = { ...defaultDeps, ...overrides };
 
   if (args.help) {
     console.log(HELP);
     return;
   }
   if (args.pricing) {
-    loadPricing(); // ensures the file exists
+    deps.loadPricing(); // ensures the file exists
     console.log(PRICING_FILE);
     return;
   }
 
   if (args.command === 'limits') {
-    await runLimits(args);
+    await runLimits(args, deps);
     return;
   }
 
-  const tools = resolveTools(args.tool);
+  const { tools } = args;
   const by = args.by === 'day' ? 'day' : 'model';
-  const pricing = loadPricing();
+  const pricing = deps.loadPricing();
 
   const result = {};
 
   if (tools.includes('claude')) {
-    const records = (await collectClaudeUsage({ cache: args.cache })).filter((r) => inDateRange(r.timestamp, args.since, args.until));
+    const records = (await deps.collectClaudeUsage({ cache: args.cache })).filter((r) => inDateRange(r.timestamp, args.since, args.until));
     result.claude = groupClaudeRows(records, by);
   }
   if (tools.includes('codex')) {
-    const records = (await collectCodexUsage({ cache: args.cache })).filter((r) => inDateRange(r.timestamp, args.since, args.until));
+    const records = (await deps.collectCodexUsage({ cache: args.cache })).filter((r) => inDateRange(r.timestamp, args.since, args.until));
     result.codex = groupCodexRows(records, by);
   }
   if (tools.includes('antigravity')) {
-    result.antigravity = collectAntigravityActivity({ since: args.since, until: args.until });
+    result.antigravity = deps.collectAntigravityActivity({ since: args.since, until: args.until });
   }
 
-  const limits = args.limits ? await gatherLimits(tools) : null;
+  const limits = args.limits ? await gatherLimits(tools, deps) : null;
 
   if (args.json) {
     console.log(JSON.stringify(limits ? { ...result, limits } : result, null, 2));
