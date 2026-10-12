@@ -21,7 +21,8 @@ function zoneOffsetMs(zone, at) {
   });
   const parts = Object.fromEntries(dtf.formatToParts(at).map((p) => [p.type, p.value]));
   const asUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
-  return asUtc - at.getTime();
+  // `asUtc` is truncated to whole seconds, so compare against the same.
+  return asUtc - Math.floor(at.getTime() / 1000) * 1000;
 }
 
 /**
@@ -33,7 +34,7 @@ function zoneOffsetMs(zone, at) {
  * @param {string} zone
  * @returns {string|null}
  */
-function parseResetStamp(text, zone) {
+export function parseResetStamp(text, zone, now = new Date()) {
   const m = text.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{1,2})(?::(\d{2}))?(am|pm)$/i);
   if (!m) return null;
   const month = MONTHS[m[1][0].toUpperCase() + m[1].slice(1, 3).toLowerCase()];
@@ -43,7 +44,6 @@ function parseResetStamp(text, zone) {
   if (/pm/i.test(m[5])) hour += 12;
   const minute = m[4] ? +m[4] : 0;
 
-  const now = new Date();
   let offset;
   try {
     offset = zoneOffsetMs(zone, now);
@@ -75,6 +75,27 @@ const LINE_RE =
   /^(.+?):\s*(\d+)%\s*used(?:\s*·\s*resets\s+([A-Za-z]{3}\s+\d{1,2},\s*\d{1,2}(?::\d{2})?(?:am|pm))\s*\(([^)]+)\))?/gim;
 
 /**
+ * Extracts the quota windows from the plain-text `/usage` report.
+ * @param {string} text
+ * @param {Date} [now]
+ * @returns {Array<{window: string, percent: number, resetsAt: string|null}>}
+ */
+export function parseUsageText(text, now = new Date()) {
+  const windows = [];
+  const re = new RegExp(LINE_RE.source, LINE_RE.flags);
+  let m;
+  while ((m = re.exec(text))) {
+    const [, label, pct, resetText, zone] = m;
+    windows.push({
+      window: shortWindowLabel(label),
+      percent: Number(pct),
+      resetsAt: resetText && zone ? parseResetStamp(resetText, zone, now) : null,
+    });
+  }
+  return windows;
+}
+
+/**
  * Claude Code's `/usage` slash command reports live quota, same as the TUI
  * status line, and (like Antigravity's `agy -p /usage`) is not persisted
  * to disk in a structured form — so this invokes the CLI directly via
@@ -104,18 +125,7 @@ export async function readClaudeRateLimit() {
   const text = parsed.result;
   if (typeof text !== 'string') return { error: 'unexpected /usage response shape from claude' };
 
-  const windows = [];
-  let m;
-  LINE_RE.lastIndex = 0;
-  while ((m = LINE_RE.exec(text))) {
-    const [, label, pct, resetText, zone] = m;
-    windows.push({
-      window: shortWindowLabel(label),
-      percent: Number(pct),
-      resetsAt: resetText && zone ? parseResetStamp(resetText, zone) : null,
-    });
-  }
-
+  const windows = parseUsageText(text);
   if (windows.length === 0) return { error: 'could not find usage lines in /usage output' };
 
   return { fetchedAt: new Date().toISOString(), windows };
