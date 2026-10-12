@@ -2,6 +2,7 @@ import { app, Tray, Menu, BrowserWindow, nativeImage, ipcMain, screen } from 'el
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { clampToArea, cornerPosition, pickArea } from './placement.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -241,14 +242,24 @@ function createWindow() {
   });
 }
 
+// Pulls the window fully onto the display it overlaps most — or the nearest
+// one if its monitor is gone. Deliberately leaves `savedPosition` alone: if
+// the original monitor comes back, the next show returns the widget there.
 function clampToWorkArea() {
   if (!win) return;
-  const { workArea } = screen.getDisplayMatching(win.getBounds());
-  const [winW, winH] = win.getSize();
-  const [x, y] = win.getPosition();
-  const clampedX = Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - winW);
-  const clampedY = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - winH);
-  win.setPosition(clampedX, clampedY, false);
+  const bounds = win.getBounds();
+  const area = pickArea(bounds, screen.getAllDisplays().map((d) => d.workArea));
+  if (!area) return;
+  const { x, y } = clampToArea(bounds, bounds, area);
+  if (x !== bounds.x || y !== bounds.y) win.setPosition(x, y, false);
+}
+
+// Monitors plugged/unplugged or resolution/scaling changed: keep the widget
+// reachable. These events arrive in bursts, so settle first.
+let displayTimer = null;
+function onDisplaysChanged() {
+  clearTimeout(displayTimer);
+  displayTimer = setTimeout(clampToWorkArea, 300);
 }
 
 function setLayout(mode) {
@@ -268,13 +279,8 @@ function setLayout(mode) {
 }
 
 function defaultWindowPosition() {
-  const { workArea } = screen.getPrimaryDisplay();
-  const [winW, winH] = win.getSize();
-  const margin = 16;
-  return {
-    x: workArea.x + workArea.width - winW - margin,
-    y: workArea.y + workArea.height - winH - margin,
-  };
+  const [width, height] = win.getSize();
+  return cornerPosition({ width, height }, screen.getPrimaryDisplay().workArea);
 }
 
 function showWindow() {
@@ -383,6 +389,9 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     app.setAppUserModelId('dev.agent-usage.gui');
     loadSettings();
+    for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
+      screen.on(event, onDisplaysChanged);
+    }
     createWindow();
     createTray();
     schedulePoll();
