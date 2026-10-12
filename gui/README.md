@@ -51,6 +51,10 @@ takes, from the same screen's bottom-right corner. All three are portrait
 - **Mini** (140×560) — a thin vertical strip: just window names, percentages,
   and bars (no reset times)
 
+If a monitor is unplugged or its resolution/scaling changes, the widget is moved
+back onto the nearest screen; its saved position is kept, so it returns to the
+original monitor once that is back.
+
 Your choices (enabled tools, layout, and window position) are saved to
 `settings.json` in the app's user-data folder and restored on the next launch.
 
