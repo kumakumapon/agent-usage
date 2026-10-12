@@ -4,7 +4,7 @@ import { collectAntigravityActivity } from './antigravity-usage.mjs';
 import { readClaudeRateLimit } from './claude-ratelimit.mjs';
 import { readCodexRateLimit } from './codex-ratelimit.mjs';
 import { readAntigravityRateLimit } from './antigravity-ratelimit.mjs';
-import { loadPricing, estimateCost, PRICING_FILE } from './pricing.mjs';
+import { loadPricing, estimateCost, hasUnpricedRows, pricingHelp, PRICING_FILE } from './pricing.mjs';
 import { parseCliArgs } from './args.mjs';
 import { formatCompact, formatCost, formatUntil, renderTable, renderBarChart, renderGauge } from './format.mjs';
 
@@ -31,7 +31,8 @@ Options:
   --no-limits            [usage only] Skip the rate-limits section (shown by default)
   --no-cache             [usage only] Re-read every session log instead of using ~/.agent-usage/cache
   --json                Print machine-readable JSON instead of tables
-  --pricing             Print the path to the editable pricing file and exit
+  --pricing             Print the path to the editable pricing file and exit (in a
+                         terminal, also explains how to set rates)
   -h, --help            Show this help
 
 Cost estimates use rates you supply in:
@@ -216,6 +217,9 @@ const defaultDeps = {
   readCodexRateLimit,
   readAntigravityRateLimit,
   loadPricing,
+  // Guidance goes to stderr, and only to a person: `$(agent-usage --pricing)`
+  // in a script keeps getting just the path.
+  isInteractive: () => Boolean(process.stderr.isTTY),
 };
 
 /** @param {string[]} tools @param {Deps} deps */
@@ -336,6 +340,7 @@ export async function run(argv, overrides = {}) {
   if (args.pricing) {
     deps.loadPricing(); // ensures the file exists
     console.log(PRICING_FILE);
+    if (deps.isInteractive()) console.error(`\n${pricingHelp(PRICING_FILE)}`);
     return;
   }
 
@@ -384,6 +389,12 @@ export async function run(argv, overrides = {}) {
       console.log();
       console.log(renderBarChart(result.codex.map((r) => ({ label: r.key, value: r.total }))));
     }
+  }
+  const unpriced =
+    (result.claude && hasUnpricedRows(pricing, 'claude', result.claude)) ||
+    (result.codex && hasUnpricedRows(pricing, 'codex', result.codex));
+  if (unpriced) {
+    console.log('\n  Cost shows "—" for models with no rate set. To add rates, run: agent-usage --pricing');
   }
   if (result.antigravity) {
     console.log('\nAntigravity CLI (agy) — activity, not tokens (see note)');
