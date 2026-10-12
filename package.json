@@ -2,6 +2,15 @@
   "name": "agent-usage",
   "version": "0.1.0",
   "description": "List local token usage and rate-limit status for Claude Code CLI, Codex CLI, and Antigravity from their local session logs.",
+  "author": "kumakumapon",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kumakumapon/agent-usage.git"
+  },
+  "homepage": "https://github.com/kumakumapon/agent-usage#readme",
+  "bugs": {
+    "url": "https://github.com/kumakumapon/agent-usage/issues"
+  },
   "type": "module",
   "scripts": {
     "test": "node --test"
@@ -20,5 +29,11 @@
   "engines": {
     "node": ">=22"
   },
+  "files": [
+    "bin.mjs",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT"
 }
