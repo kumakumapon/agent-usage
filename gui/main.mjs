@@ -1,7 +1,9 @@
-import { app, Tray, Menu, BrowserWindow, nativeImage, ipcMain, screen } from 'electron';
+import { app, Tray, Menu, BrowserWindow, Notification, nativeImage, ipcMain, screen } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { DEFAULT_THRESHOLDS, alertText, createAlertTracker, normalizeThresholds } from './alerts.mjs';
+import { renderTrayIcon } from './tray-icon.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +33,11 @@ const LAYOUTS = {
   mini: { label: 'Mini', size: [140, 560] },
 };
 let layoutMode = 'normal';
+// Desktop notification when a usage window passes one of these percentages.
+// Thresholds aren't in the tray menu; edit `notifications.thresholds` in
+// settings.json.
+const notifications = { enabled: true, thresholds: [...DEFAULT_THRESHOLDS] };
+const alertTracker = createAlertTracker();
 // Last position the user dragged the widget to; null means "use the default
 // bottom-right corner".
 let savedPosition = null;
@@ -50,6 +57,8 @@ function loadSettings() {
     if (typeof raw.enabledTools?.[name] === 'boolean') enabledTools[name] = raw.enabledTools[name];
   }
   if (LAYOUTS[raw.layoutMode]) layoutMode = raw.layoutMode;
+  if (typeof raw.notifications?.enabled === 'boolean') notifications.enabled = raw.notifications.enabled;
+  notifications.thresholds = normalizeThresholds(raw.notifications?.thresholds) ?? notifications.thresholds;
   const pos = raw.position;
   if (Number.isFinite(pos?.x) && Number.isFinite(pos?.y)) savedPosition = { x: pos.x, y: pos.y };
 }
@@ -59,7 +68,7 @@ function writeSettings() {
   try {
     writeFileSync(
       settingsPath(),
-      JSON.stringify({ enabledTools, layoutMode, position: savedPosition }, null, 2),
+      JSON.stringify({ enabledTools, layoutMode, position: savedPosition, notifications }, null, 2),
     );
   } catch (err) {
     console.error('could not save settings:', err.message);
@@ -115,9 +124,37 @@ function currentResult() {
   return result;
 }
 
+// The tray icon is a gauge of the single highest-usage window, so the
+// number is visible without opening the widget.
+let shownIconPercent;
+function updateTrayIcon() {
+  if (!tray) return;
+  const percent = summarize(lastResult)?.percent ?? null;
+  if (percent === shownIconPercent) return;
+  shownIconPercent = percent;
+  const { width, height, buffer } = renderTrayIcon(percent);
+  tray.setImage(nativeImage.createFromBitmap(buffer, { width, height, scaleFactor: 2 }));
+}
+
+// Always evaluated, so the baseline stays current even while alerts are
+// off — turning them on later doesn't announce old crossings.
+function checkAlerts() {
+  const alerts = alertTracker.evaluate(lastResult, notifications.thresholds);
+  if (!notifications.enabled || !Notification.isSupported()) return;
+  for (const alert of alerts) {
+    const { title, body } = alertText(alert, toolLabel(alert.tool));
+    const toast = new Notification({ title, body });
+    toast.on('click', () => showWindow());
+    toast.on('failed', (_event, error) => console.error('usage alert not shown:', error));
+    toast.show();
+  }
+}
+
 function publish() {
   lastResult = currentResult();
   if (tray) tray.setToolTip(tooltipFor(lastResult));
+  updateTrayIcon();
+  checkAlerts();
   if (win) {
     // "updated" means the last successful reading, not the last attempt.
     const latest = Math.max(0, ...Object.keys(lastResult).map((n) => toolState[n].lastOkAt));
@@ -345,6 +382,15 @@ function buildContextMenu() {
     },
     { type: 'separator' },
     {
+      label: `Usage alerts (${notifications.thresholds.join('% / ')}%)`,
+      type: 'checkbox',
+      checked: notifications.enabled,
+      click: (item) => {
+        notifications.enabled = item.checked;
+        saveSettings();
+      },
+    },
+    {
       label: 'Start with Windows',
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,
@@ -360,8 +406,8 @@ function syncTrayMenu() {
 }
 
 function createTray() {
-  const icon = nativeImage.createFromPath(join(__dirname, 'assets', 'icon.png'));
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  const { width, height, buffer } = renderTrayIcon(null);
+  tray = new Tray(nativeImage.createFromBitmap(buffer, { width, height, scaleFactor: 2 }));
   tray.setToolTip('agent-usage — loading…');
   syncTrayMenu();
   tray.on('click', () => toggleWindow());

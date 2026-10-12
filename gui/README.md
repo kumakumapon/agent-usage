@@ -19,7 +19,15 @@ This adds a small always-on-top widget (bottom-right corner by default,
 draggable by its header) showing gauges and reset times for each enabled
 tool, plus a tray icon that:
 
+- draws the icon as a gauge of your single highest-usage window — the bar
+  fills with the percentage and turns amber at 70% and red at 90%
 - shows a per-window usage tooltip on hover
+- raises a desktop notification when a usage window passes 80% and again at
+  95% (once per crossing; it re-arms when the window resets). The first
+  reading after launch is only a baseline, so starting the app while usage is
+  already high doesn't pop alerts. Turn this off with **Usage alerts** in the
+  tray menu; to change the percentages edit `notifications.thresholds` in
+  `settings.json`
 - if a refresh fails, the last good reading stays on screen dimmed with a
   "⚠ stale" badge, the error, and when it was last good (the header's
   "updated" time is the last successful reading, not the last attempt)
