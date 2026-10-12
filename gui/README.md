@@ -84,4 +84,26 @@ in.
 npm run dist
 ```
 
-Produces an NSIS installer under `gui/dist/` via `electron-builder`.
+Produces, under `gui/dist/` via `electron-builder`:
+
+- `agent-usage-gui-setup-<version>-x64.exe` — NSIS installer
+- `agent-usage-gui-<version>-x64.exe` — portable exe (no install)
+
+The builds are **not code-signed**, so Windows SmartScreen shows an "unknown
+publisher" warning on first run (More info → Run anyway). There is also no
+auto-update yet: to upgrade, install or run the newer release.
+
+## Releasing
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`):
+
+1. Bump `version` in both `package.json` and `gui/package.json` (they must
+   match the tag) and merge to `main`.
+2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+3. The workflow runs the tests, builds the installer and portable exe on
+   Windows, and attaches them to the tag's GitHub Release (creating it with
+   generated notes if it doesn't exist yet).
+
+To sign the builds, add a code-signing certificate as the repository secrets
+`CSC_LINK` (the .pfx, as a file path/URL or base64) and `CSC_KEY_PASSWORD`;
+`electron-builder` picks them up with no further config.

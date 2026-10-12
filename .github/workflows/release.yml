@@ -1,0 +1,58 @@
+name: release
+
+# Pushing a tag like v0.2.0 builds the Windows tray app and attaches the
+# installer + portable exe to that tag's GitHub Release (created if missing).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tag must match the package versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for pkg in package.json gui/package.json; do
+            version="$(node -p "require('./$pkg').version")"
+            if [ "$version" != "$tag" ]; then
+              echo "::error file=$pkg::version $version does not match tag $GITHUB_REF_NAME"
+              exit 1
+            fi
+          done
+
+      - run: npm test
+
+      - name: Build installer and portable exe
+        working-directory: gui
+        run: |
+          npm ci
+          npm run dist
+        env:
+          # Unsigned unless a code-signing certificate is configured:
+          # add CSC_LINK / CSC_KEY_PASSWORD as repository secrets and
+          # electron-builder will pick them up automatically.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Attach to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" gui/dist/agent-usage-gui-*.exe --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" gui/dist/agent-usage-gui-*.exe --title "$GITHUB_REF_NAME" --generate-notes
+          fi

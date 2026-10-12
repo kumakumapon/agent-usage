@@ -2,12 +2,23 @@
   "name": "agent-usage-gui",
   "version": "0.1.0",
   "description": "Windows system-tray app showing live Claude Code / Codex / Antigravity rate-limit usage, built on agent-usage's own readers.",
+  "author": "kumakumapon",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kumakumapon/agent-usage.git",
+    "directory": "gui"
+  },
+  "homepage": "https://github.com/kumakumapon/agent-usage#readme",
+  "bugs": {
+    "url": "https://github.com/kumakumapon/agent-usage/issues"
+  },
   "private": true,
   "type": "module",
   "main": "main.mjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win --publish never"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -17,7 +28,11 @@
     "appId": "dev.agent-usage.gui",
     "productName": "Agent Usage",
     "win": {
-      "target": ["portable", "nsis"]
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "artifactName": "agent-usage-gui-${version}-${arch}.${ext}"
     },
     "files": [
       "**/*",
@@ -27,11 +42,16 @@
       {
         "from": "../src",
         "to": "src",
-        "filter": ["**/*.mjs"]
+        "filter": [
+          "**/*.mjs"
+        ]
       }
     ],
     "directories": {
       "output": "dist"
+    },
+    "nsis": {
+      "artifactName": "agent-usage-gui-setup-${version}-${arch}.${ext}"
     }
   }
 }
