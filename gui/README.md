@@ -110,8 +110,30 @@ Produces, under `gui/dist/` via `electron-builder`:
 - `agent-usage-gui-<version>-x64.exe` — portable exe (no install)
 
 The builds are **not code-signed**, so Windows SmartScreen shows an "unknown
-publisher" warning on first run (More info → Run anyway). See
-[Updates](#updates) for how the installed app upgrades itself.
+publisher" warning on first run (More info → Run anyway). Each release also
+publishes `SHA256SUMS.txt` so you can [verify a download](#verifying-downloads).
+See [Updates](#updates) for how the installed app upgrades itself.
+
+## Verifying downloads
+
+Because the builds aren't code-signed, Windows can't tell you who published
+them. Every GitHub Release therefore includes `SHA256SUMS.txt` — the SHA-256 of
+each exe — so you can confirm the file you downloaded is the one in the release
+and wasn't corrupted or swapped on the way. In PowerShell, in the folder with
+both files:
+
+```powershell
+$file = "agent-usage-gui-setup-0.2.0-x64.exe"   # the file you downloaded
+$expected = ((Get-Content .\SHA256SUMS.txt | Where-Object { $_ -match [regex]::Escape($file) }) -split '\s+')[0]
+(Get-FileHash ".\$file" -Algorithm SHA256).Hash -eq $expected    # True = match
+```
+
+`certutil -hashfile <file> SHA256` prints the hash for you to compare by eye.
+
+This catches a damaged or tampered download, **not** a compromised release:
+the sums are published in the same place as the files, so anyone who could
+replace one could replace the other. The same holds for the installed app's
+updater, which checks the SHA-512 in `latest.yml` from the same release.
 
 ## Updates
 
@@ -129,8 +151,9 @@ repository's GitHub Releases. It is deliberately conservative:
 - The download is checked against the SHA-512 in the release's `latest.yml`.
   Because the builds are **not code-signed**, Windows does not verify who
   published the installer — the trust anchor is this repository's Releases
-  page. Prefer to update by hand? Leave automatic checks off and download from
-  [Releases](https://github.com/kumakumapon/agent-usage/releases).
+  page. Prefer to update by hand? Leave automatic checks off, download from
+  [Releases](https://github.com/kumakumapon/agent-usage/releases) and
+  [verify it](#verifying-downloads).
 - The **portable** exe can't replace itself, so its menu item opens the
   Releases page instead. A development run (`npm start`) has no update feed
   and shows the item greyed out.
@@ -149,8 +172,8 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. The workflow runs the tests, builds the installer and portable exe on
    Windows, and attaches them — plus `latest.yml` and the `.blockmap`, which
-   installed apps read to find the update — to the tag's GitHub Release
-   (creating it with generated notes if it doesn't exist yet).
+   installed apps read to find the update, and `SHA256SUMS.txt` — to the tag's
+   GitHub Release (creating it with generated notes if it doesn't exist yet).
 
 To sign the builds, add a code-signing certificate as the repository secrets
 `CSC_LINK` (the .pfx, as a file path/URL or base64) and `CSC_KEY_PASSWORD`;
