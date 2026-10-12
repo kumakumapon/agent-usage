@@ -1,6 +1,6 @@
 {
   "name": "agent-usage",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "List local token usage and rate-limit status for Claude Code CLI, Codex CLI, and Antigravity from their local session logs.",
   "author": "kumakumapon",
   "repository": {

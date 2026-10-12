@@ -168,7 +168,9 @@ the choice as `updates.autoCheck`.
 Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 
 1. Bump `version` in both `package.json` and `gui/package.json` (they must
-   match the tag) and merge to `main`.
+   match the tag; `npm version X.Y.Z --no-git-tag-version` in each folder also
+   updates the lockfile) and the `clientInfo` version in
+   `src/codex-ratelimit.mjs`, then merge to `main`.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. The workflow runs the tests, builds the installer and portable exe on
    Windows, and attaches them — plus `latest.yml` and the `.blockmap`, which

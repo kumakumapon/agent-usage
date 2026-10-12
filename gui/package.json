@@ -1,6 +1,6 @@
 {
   "name": "agent-usage-gui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Windows system-tray app showing live Claude Code / Codex / Antigravity rate-limit usage, built on agent-usage's own readers.",
   "author": "kumakumapon",
   "license": "MIT",
