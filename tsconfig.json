@@ -13,5 +13,5 @@
     "useUnknownInCatchVariables": false,
     "skipLibCheck": true
   },
-  "include": ["bin.mjs", "src/**/*.mjs", "gui/alerts.mjs", "gui/placement.mjs", "gui/tray-icon.mjs", "gui/i18n.mjs"]
+  "include": ["bin.mjs", "src/**/*.mjs", "gui/alerts.mjs", "gui/placement.mjs", "gui/tray-icon.mjs", "gui/i18n.mjs", "gui/updater.mjs"]
 }

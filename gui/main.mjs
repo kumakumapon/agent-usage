@@ -1,4 +1,6 @@
-import { app, Tray, Menu, BrowserWindow, Notification, nativeImage, nativeTheme, ipcMain, screen } from 'electron';
+import { app, Tray, Menu, BrowserWindow, Notification, nativeImage, nativeTheme, ipcMain, screen, shell } from 'electron';
+import { EventEmitter } from 'node:events';
+import electronUpdater from 'electron-updater';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -6,6 +8,7 @@ import { clampToArea, cornerPosition, pickArea } from './placement.mjs';
 import { DEFAULT_THRESHOLDS, alertText, createAlertTracker, normalizeThresholds } from './alerts.mjs';
 import { renderTrayIcon } from './tray-icon.mjs';
 import { LANGUAGES, createTranslator, resolveLanguage, windowLabel } from './i18n.mjs';
+import { createUpdater, updateSupport } from './updater.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +42,12 @@ let layoutMode = 'normal';
 // UI language ('auto' follows the system locale) and colour theme ('system'
 // follows the OS light/dark setting). `t` translates menu, tooltip and
 // notification text; the widget page gets the language over IPC.
+// Updates: never contacted unless the user clicks "Check for updates" or has
+// switched on automatic checks (off by default — the app otherwise makes no
+// network requests). Downloading and installing always need a click.
+const RELEASES_URL = 'https://github.com/kumakumapon/agent-usage/releases';
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const updateSettings = { autoCheck: false };
 const THEMES = ['system', 'dark', 'light'];
 let languageSetting = 'auto';
 let themeSetting = 'system';
@@ -70,6 +79,7 @@ function loadSettings() {
   if (LAYOUTS[raw.layoutMode]) layoutMode = raw.layoutMode;
   if (raw.language === 'auto' || LANGUAGES.includes(raw.language)) languageSetting = raw.language;
   if (THEMES.includes(raw.theme)) themeSetting = raw.theme;
+  if (typeof raw.updates?.autoCheck === 'boolean') updateSettings.autoCheck = raw.updates.autoCheck;
   if (typeof raw.notifications?.enabled === 'boolean') notifications.enabled = raw.notifications.enabled;
   notifications.thresholds = normalizeThresholds(raw.notifications?.thresholds) ?? notifications.thresholds;
   const pos = raw.position;
@@ -82,7 +92,7 @@ function writeSettings() {
     writeFileSync(
       settingsPath(),
       JSON.stringify(
-        { enabledTools, layoutMode, position: savedPosition, notifications, language: languageSetting, theme: themeSetting },
+        { enabledTools, layoutMode, position: savedPosition, notifications, language: languageSetting, theme: themeSetting, updates: updateSettings },
         null,
         2,
       ),
@@ -367,6 +377,88 @@ function toggleWindow() {
   }
 }
 
+// Only an installed Windows build can replace itself; a portable exe or a
+// development run can't, and then electron-updater is never even loaded.
+const updateEnv = {
+  isPackaged: app.isPackaged,
+  portable: Boolean(process.env.PORTABLE_EXECUTABLE_DIR),
+  platform: process.platform,
+};
+const updater = createUpdater({
+  autoUpdater: updateSupport(updateEnv).ok ? electronUpdater.autoUpdater : new EventEmitter(),
+  support: updateSupport(updateEnv),
+  onChange: (state) => {
+    syncTrayMenu();
+    // A scheduled check found something: say so once. (A manual check shows
+    // its result in the menu the user just used.)
+    if (state.status === 'available' && !state.manual && Notification.isSupported()) {
+      const toast = new Notification({
+        title: t('update.toastTitle', { version: state.version ?? '' }),
+        body: t('update.toastBody'),
+      });
+      toast.on('failed', (_event, error) => console.error('update notice not shown:', error));
+      toast.show();
+    }
+  },
+});
+
+let updateTimer = null;
+function scheduleUpdateChecks() {
+  clearInterval(updateTimer);
+  updateTimer = null;
+  if (!updateSettings.autoCheck || !updateSupport(updateEnv).ok) return;
+  updateTimer = setInterval(() => void updater.check(), UPDATE_CHECK_INTERVAL_MS);
+  // Not at launch: give startup a moment, and let a quick quit avoid the request.
+  setTimeout(() => void updater.check(), 60_000).unref();
+}
+
+function updateMenuItems() {
+  const state = updater.state;
+  const check = () => void updater.check({ manual: true });
+  switch (state.status) {
+    case 'unsupported':
+      if (state.reason === 'dev') return [{ label: t('update.devDisabled'), enabled: false }];
+      if (state.reason === 'portable') {
+        return [{ label: t('update.openReleases'), click: () => void shell.openExternal(RELEASES_URL) }];
+      }
+      return [];
+    case 'checking':
+      return [{ label: t('update.checking'), enabled: false }];
+    case 'upToDate':
+      return [{ label: t('update.upToDate'), click: check }];
+    case 'available':
+      return [{ label: t('update.available', { version: state.version ?? '' }), click: () => void updater.download() }];
+    case 'downloading':
+      return [{ label: t('update.downloading', { version: state.version ?? '', percent: state.percent ?? 0 }), enabled: false }];
+    case 'ready':
+      return [{ label: t('update.ready', { version: state.version ?? '' }), click: () => updater.install() }];
+    case 'error':
+      return [{ label: t('update.error', { error: state.error ?? '' }), click: check }];
+    default:
+      return [{ label: t('update.check'), click: check }];
+  }
+}
+
+// The update items with their own leading separator, or nothing when
+// updating is off the table for this build.
+function updateSection() {
+  const items = [...updateMenuItems()];
+  if (updater.state.status !== 'unsupported') {
+    items.push({
+      label: t('update.auto'),
+      type: 'checkbox',
+      checked: updateSettings.autoCheck,
+      click: (item) => {
+        updateSettings.autoCheck = item.checked;
+        saveSettings();
+        scheduleUpdateChecks();
+        if (item.checked) void updater.check();
+      },
+    });
+  }
+  return items.length ? [{ type: 'separator' }, ...items] : [];
+}
+
 function buildContextMenu() {
   return Menu.buildFromTemplate([
     {
@@ -433,6 +525,8 @@ function buildContextMenu() {
         click: () => setTheme(theme),
       })),
     },
+    ...updateSection(),
+    { type: 'separator' },
     {
       label: t('menu.startup'),
       type: 'checkbox',
@@ -502,6 +596,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     createTray();
     schedulePoll();
+    scheduleUpdateChecks();
     showWindow();
   });
 }

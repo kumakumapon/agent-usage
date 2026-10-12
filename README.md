@@ -133,6 +133,10 @@ cross-platform part.
   `agy -p /usage` calls described above, which are each tool's own CLI
   talking to its own backend — this tool only invokes them and parses the
   reply.
+- The Windows tray app can also look for a newer release on GitHub, but only
+  when you click **Check for updates** or turn on **Check for updates
+  automatically** (off by default). It sends nothing but the request itself.
+  See [`gui/README.md`](gui/README.md#updates).
 - Session logs can contain your actual prompts, file paths, and code. This
   tool only ever extracts token counts, model names, and timestamps from
   them — project directories, working-directory paths, and conversation text
