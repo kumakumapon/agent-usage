@@ -58,9 +58,26 @@ Reads:
   agent steps — clearly labeled as not token data.
 
 Cost estimates are opt-in: fill in per-model USD/1M-token rates in
-`~/.agent-usage/pricing.json` (created empty on first run — run
-`agent-usage --pricing` to print its path). Models with no configured rate
-show a `—` in the Cost column instead of a guessed number.
+`~/.agent-usage/pricing.json`. Models with no configured rate show a `—` in the
+Cost column instead of a guessed number — this tool never supplies prices, since
+they change and differ by plan.
+
+Run `agent-usage --pricing` to create the file and print its path (in a terminal
+it also shows the format below; piped, it prints only the path). Add each model
+you use — the name is the first column of `agent-usage usage` — with the current
+rates from your provider's pricing page
+([Claude](https://claude.com/pricing), [OpenAI](https://openai.com/api/pricing/)):
+
+```json
+{
+  "claude": { "<model>": { "input": 0, "output": 0, "cacheWrite": 0, "cacheRead": 0 } },
+  "codex":  { "<model>": { "input": 0, "cachedInput": 0, "output": 0 } }
+}
+```
+
+Replace the zeros with the real rates. When your provider changes its prices,
+edit the numbers in the same file — nothing else needs updating. While any model
+in a table has no rate, `usage` prints a one-line reminder (not with `--json`).
 
 Parsed results are cached per session file in `~/.agent-usage/cache/`, so repeat
 runs only read what was appended since the last one (a warm run is several times
