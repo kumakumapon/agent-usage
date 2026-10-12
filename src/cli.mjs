@@ -29,6 +29,7 @@ Options:
   --until <date>       [usage only] Only include usage on/before this date (YYYY-MM-DD)
   --chart               [usage only] Also print a bar chart of totals per row
   --no-limits            [usage only] Skip the rate-limits section (shown by default)
+  --no-cache             [usage only] Re-read every session log instead of using ~/.agent-usage/cache
   --json                Print machine-readable JSON instead of tables
   --pricing             Print the path to the editable pricing file and exit
   -h, --help            Show this help
@@ -42,7 +43,8 @@ function parseCliArgs(argv) {
   // util.parseArgs has no built-in --no-x negation for booleans, so handle
   // --no-limits manually before parsing.
   const noLimits = argv.includes('--no-limits');
-  const filtered = argv.filter((a) => a !== '--no-limits');
+  const noCache = argv.includes('--no-cache');
+  const filtered = argv.filter((a) => a !== '--no-limits' && a !== '--no-cache');
 
   const { values, positionals } = parseArgs({
     args: filtered,
@@ -61,7 +63,7 @@ function parseCliArgs(argv) {
     },
   });
   const command = positionals[0] === 'usage' ? 'usage' : 'limits';
-  return { ...values, command, limits: !noLimits };
+  return { ...values, command, limits: !noLimits, cache: !noCache };
 }
 
 // antigravity is opt-in: it must be named explicitly (or via --tool all),
@@ -359,11 +361,11 @@ export async function run(argv) {
   const result = {};
 
   if (tools.includes('claude')) {
-    const records = (await collectClaudeUsage()).filter((r) => inDateRange(r.timestamp, args.since, args.until));
+    const records = (await collectClaudeUsage({ cache: args.cache })).filter((r) => inDateRange(r.timestamp, args.since, args.until));
     result.claude = groupClaudeRows(records, by);
   }
   if (tools.includes('codex')) {
-    const records = (await collectCodexUsage()).filter((r) => inDateRange(r.timestamp, args.since, args.until));
+    const records = (await collectCodexUsage({ cache: args.cache })).filter((r) => inDateRange(r.timestamp, args.since, args.until));
     result.codex = groupCodexRows(records, by);
   }
   if (tools.includes('antigravity')) {

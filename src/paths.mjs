@@ -35,3 +35,6 @@ export function antigravityStateCandidates() {
 export const ANTIGRAVITY_CLI_DIR = path.join(home, '.gemini', 'antigravity-cli');
 
 export const PRICING_FILE = path.join(home, '.agent-usage', 'pricing.json');
+
+// Parsed-usage caches (see incremental.mjs); safe to delete at any time.
+export const CACHE_DIR = path.join(home, '.agent-usage', 'cache');
